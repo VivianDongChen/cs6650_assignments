@@ -1,0 +1,25 @@
+flowchart LR
+    subgraph Client
+        MG["MessageGenerator\n(single thread)"]
+        Q[(ArrayBlockingQueue)]
+        subgraph Warmup_Main_Workers
+            SW["SenderWorker × N"]
+        end
+        MET["MetricsRecorder /\nMetricsCollector"]
+        CSV["CsvExporter &\nThroughputTracker"]
+        HC[Health Check Script]
+    end
+
+    subgraph Server
+        WSE[ChatWebSocketEndpoint]
+        VAL[MessageValidator]
+        HAND[EchoMessageHandler]
+        HS[HealthServlet]
+    end
+
+    MG -->|"500k messages"| Q --> SW
+    SW -->|"WebSocket JSON"| WSE
+    WSE --> VAL
+    WSE --> HAND
+    SW -->|metrics| MET --> CSV
+    HC -->|"GET /health"| HS

@@ -1,0 +1,31 @@
+# Java
+*.class
+*.jar
+!**/maven-wrapper.jar
+*.war
+*.ear
+target/
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Maven
+.mvn/
+
+# Application
+*.log
+logs/
+
+# Results
+*.csv
+!results/**/*.csv
+
+# Credentials
+*.pem
+*.key
+credentials.json
+.env

@@ -1,0 +1,15 @@
+# macOS artifacts
+.DS_Store
+
+# Build outputs
+target/
+out/
+*.log
+
+# IDE metadata
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/

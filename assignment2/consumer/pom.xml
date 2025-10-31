@@ -20,6 +20,9 @@
     <rabbitmq.version>5.20.0</rabbitmq.version>
     <javax.websocket.version>1.1</javax.websocket.version>
     <tyrus.version>1.19</tyrus.version>
+    <caffeine.version>3.1.8</caffeine.version>
+    <jetty.version>11.0.20</jetty.version>
+    <jakarta.servlet.version>5.0.0</jakarta.servlet.version>
   </properties>
 
   <dependencies>
@@ -64,6 +67,30 @@
       <groupId>org.glassfish.tyrus.bundles</groupId>
       <artifactId>tyrus-standalone-client</artifactId>
       <version>${tyrus.version}</version>
+    </dependency>
+
+    <!-- Caffeine Cache for deduplication -->
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
+      <version>${caffeine.version}</version>
+    </dependency>
+
+    <!-- Jetty for health check endpoint -->
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-server</artifactId>
+      <version>${jetty.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlet</artifactId>
+      <version>${jetty.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.servlet</groupId>
+      <artifactId>jakarta.servlet-api</artifactId>
+      <version>${jakarta.servlet.version}</version>
     </dependency>
 
     <!-- Testing -->

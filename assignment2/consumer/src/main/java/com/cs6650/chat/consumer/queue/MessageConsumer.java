@@ -26,7 +26,8 @@ public class MessageConsumer {
     private static final int RABBITMQ_PORT = Integer.parseInt(System.getenv().getOrDefault("RABBITMQ_PORT", "5672"));
     private static final String RABBITMQ_USERNAME = System.getenv().getOrDefault("RABBITMQ_USERNAME", "guest");
     private static final String RABBITMQ_PASSWORD = System.getenv().getOrDefault("RABBITMQ_PASSWORD", "guest");
-    private static final int CONSUMER_THREADS = Integer.parseInt(System.getenv().getOrDefault("CONSUMER_THREADS", "40"));
+    // One thread per room to guarantee message ordering within each room
+    private static final int CONSUMER_THREADS = Integer.parseInt(System.getenv().getOrDefault("CONSUMER_THREADS", "20"));
     private static final int PREFETCH_COUNT = Integer.parseInt(System.getenv().getOrDefault("PREFETCH_COUNT", "10"));
 
     private final Connection connection;
@@ -34,6 +35,7 @@ public class MessageConsumer {
     private final ObjectMapper objectMapper;
     private final ExecutorService executorService;
     private final List<Channel> channels;
+    private final RetryHandler retryHandler;
 
     public MessageConsumer(RoomManager roomManager) throws IOException, TimeoutException {
         this.roomManager = roomManager;
@@ -41,6 +43,7 @@ public class MessageConsumer {
         this.objectMapper.registerModule(new JavaTimeModule());
         this.channels = new ArrayList<>();
         this.executorService = Executors.newFixedThreadPool(CONSUMER_THREADS);
+        this.retryHandler = new RetryHandler();
 
         // Create connection
         ConnectionFactory factory = new ConnectionFactory();
@@ -61,34 +64,26 @@ public class MessageConsumer {
 
     /**
      * Start consuming messages from all room queues.
+     * One thread per room to guarantee message ordering.
      */
     public void startConsuming() throws IOException {
-        LOGGER.info("Starting {} consumer threads", CONSUMER_THREADS);
+        LOGGER.info("Starting {} consumer threads (one per room)", CONSUMER_THREADS);
 
-        // Distribute rooms across consumer threads
-        int roomsPerThread = 20 / CONSUMER_THREADS;
-        int remainingRooms = 20 % CONSUMER_THREADS;
-
-        int currentRoom = 1;
-        for (int i = 0; i < CONSUMER_THREADS; i++) {
+        // Create one thread per room (20 rooms = 20 threads)
+        for (int roomId = 1; roomId <= 20; roomId++) {
             Channel channel = connection.createChannel();
             channel.basicQos(PREFETCH_COUNT);
             channels.add(channel);
 
-            // Assign rooms to this thread
-            int roomsForThisThread = roomsPerThread + (i < remainingRooms ? 1 : 0);
+            // Each thread handles exactly one room
             List<String> assignedRooms = new ArrayList<>();
+            assignedRooms.add(String.valueOf(roomId));
 
-            for (int j = 0; j < roomsForThisThread && currentRoom <= 20; j++) {
-                assignedRooms.add(String.valueOf(currentRoom));
-                currentRoom++;
-            }
-
-            // Start consumer for assigned rooms
-            startConsumerForRooms(channel, assignedRooms, i);
+            // Start consumer for this single room
+            startConsumerForRooms(channel, assignedRooms, roomId - 1);
         }
 
-        LOGGER.info("All {} consumer threads started", CONSUMER_THREADS);
+        LOGGER.info("All {} consumer threads started (one per room for ordering guarantee)", CONSUMER_THREADS);
     }
 
     /**
@@ -102,24 +97,26 @@ public class MessageConsumer {
                 @Override
                 public void handleDelivery(String consumerTag, Envelope envelope,
                                            AMQP.BasicProperties properties, byte[] body) throws IOException {
+                    String messageId = "unknown";
                     try {
                         // Parse message
                         String messageJson = new String(body, "UTF-8");
                         QueueMessage message = objectMapper.readValue(messageJson, QueueMessage.class);
+                        messageId = message.getMessageId();
 
                         LOGGER.debug("Thread {} consumed message {} from room {}",
-                                threadId, message.getMessageId(), roomId);
+                                threadId, messageId, roomId);
 
                         // Broadcast to room
                         roomManager.broadcastToRoom(message);
 
-                        // Acknowledge message
+                        // Acknowledge message after successful processing
                         channel.basicAck(envelope.getDeliveryTag(), false);
 
                     } catch (Exception e) {
-                        LOGGER.error("Error processing message from room {}: {}", roomId, e.getMessage(), e);
-                        // Negative acknowledgment - requeue message
-                        channel.basicNack(envelope.getDeliveryTag(), false, true);
+                        LOGGER.error("Error processing message {} from room {}: {}", messageId, roomId, e.getMessage(), e);
+                        // Use retry handler for failed delivery
+                        retryHandler.handleFailedDelivery(channel, envelope.getDeliveryTag(), properties, body, roomId, messageId);
                     }
                 }
             };

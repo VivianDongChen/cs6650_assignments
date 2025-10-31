@@ -1,6 +1,8 @@
 package com.cs6650.chat.consumer.broadcast;
 
 import com.cs6650.chat.consumer.model.QueueMessage;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -9,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -24,21 +27,32 @@ public class RoomManager {
     // Map: sessionId -> roomId for quick lookup
     private final Map<String, String> sessionToRoom;
 
+    // Deduplication cache: messageId -> timestamp
+    // Messages expire after 5 minutes to prevent unbounded memory growth
+    private final Cache<String, Long> processedMessages;
+
     // Metrics
     private final AtomicLong messagesProcessed = new AtomicLong(0);
     private final AtomicLong broadcastsSucceeded = new AtomicLong(0);
     private final AtomicLong broadcastsFailed = new AtomicLong(0);
+    private final AtomicLong duplicatesDetected = new AtomicLong(0);
 
     public RoomManager() {
         this.roomSessions = new ConcurrentHashMap<>();
         this.sessionToRoom = new ConcurrentHashMap<>();
+
+        // Initialize deduplication cache with 5-minute TTL
+        this.processedMessages = Caffeine.newBuilder()
+                .expireAfterWrite(5, TimeUnit.MINUTES)
+                .maximumSize(100000)  // Limit to 100k messages
+                .build();
 
         // Pre-initialize rooms 1-20
         for (int i = 1; i <= 20; i++) {
             roomSessions.put(String.valueOf(i), new CopyOnWriteArraySet<>());
         }
 
-        LOGGER.info("RoomManager initialized with 20 rooms");
+        LOGGER.info("RoomManager initialized with 20 rooms and deduplication cache");
     }
 
     /**
@@ -69,13 +83,28 @@ public class RoomManager {
 
     /**
      * Broadcast a message to all sessions in a room.
+     * Implements duplicate detection to ensure at-most-once delivery.
      */
     public void broadcastToRoom(QueueMessage message) {
+        String messageId = message.getMessageId();
         String roomId = message.getRoomId();
+
+        // Check for duplicate message
+        Long previousTimestamp = processedMessages.getIfPresent(messageId);
+        if (previousTimestamp != null) {
+            duplicatesDetected.incrementAndGet();
+            LOGGER.warn("Duplicate message detected: {} in room {} (previously processed at {}). Skipping broadcast.",
+                    messageId, roomId, previousTimestamp);
+            return;
+        }
+
+        // Mark message as processed
+        processedMessages.put(messageId, System.currentTimeMillis());
+
         Set<Session> sessions = roomSessions.get(roomId);
 
         if (sessions == null || sessions.isEmpty()) {
-            LOGGER.debug("No sessions in room {} to broadcast message {}", roomId, message.getMessageId());
+            LOGGER.debug("No sessions in room {} to broadcast message {}", roomId, messageId);
             messagesProcessed.incrementAndGet();
             return;
         }
@@ -110,7 +139,7 @@ public class RoomManager {
         broadcastsFailed.addAndGet(failCount);
 
         LOGGER.debug("Broadcasted message {} to room {}: {} succeeded, {} failed",
-                message.getMessageId(), roomId, successCount, failCount);
+                messageId, roomId, successCount, failCount);
     }
 
     /**
@@ -177,6 +206,10 @@ public class RoomManager {
         return broadcastsFailed.get();
     }
 
+    public long getDuplicatesDetected() {
+        return duplicatesDetected.get();
+    }
+
     /**
      * Print statistics.
      */
@@ -184,8 +217,10 @@ public class RoomManager {
         LOGGER.info("=== RoomManager Statistics ===");
         LOGGER.info("Total sessions: {}", getTotalSessions());
         LOGGER.info("Messages processed: {}", messagesProcessed.get());
+        LOGGER.info("Duplicates detected: {}", duplicatesDetected.get());
         LOGGER.info("Broadcasts succeeded: {}", broadcastsSucceeded.get());
         LOGGER.info("Broadcasts failed: {}", broadcastsFailed.get());
+        LOGGER.info("Cache size: {}", processedMessages.estimatedSize());
 
         for (int i = 1; i <= 20; i++) {
             String roomId = String.valueOf(i);

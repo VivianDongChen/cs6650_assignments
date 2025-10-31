@@ -1,6 +1,7 @@
 package com.cs6650.chat.consumer;
 
 import com.cs6650.chat.consumer.broadcast.RoomManager;
+import com.cs6650.chat.consumer.health.HealthServer;
 import com.cs6650.chat.consumer.queue.MessageConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,7 @@ public class ConsumerApplication {
 
         RoomManager roomManager = null;
         MessageConsumer messageConsumer = null;
+        HealthServer healthServer = null;
         ScheduledExecutorService statsScheduler = null;
 
         try {
@@ -35,6 +37,10 @@ public class ConsumerApplication {
 
             // Start consuming messages
             messageConsumer.startConsuming();
+
+            // Start health check server
+            healthServer = new HealthServer(messageConsumer);
+            healthServer.start();
 
             LOGGER.info("Consumer application started successfully");
 
@@ -50,11 +56,19 @@ public class ConsumerApplication {
 
             // Add shutdown hook
             MessageConsumer finalMessageConsumer = messageConsumer;
+            HealthServer finalHealthServer = healthServer;
             ScheduledExecutorService finalStatsScheduler = statsScheduler;
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 LOGGER.info("Shutdown signal received");
                 if (finalStatsScheduler != null) {
                     finalStatsScheduler.shutdown();
+                }
+                if (finalHealthServer != null) {
+                    try {
+                        finalHealthServer.stop();
+                    } catch (Exception e) {
+                        LOGGER.error("Error stopping health server", e);
+                    }
                 }
                 if (finalMessageConsumer != null) {
                     finalMessageConsumer.shutdown();

@@ -1,0 +1,41 @@
+[Unit]
+Description=CS6650 Chat Consumer Application
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/consumer
+
+# RabbitMQ Configuration
+Environment="RABBITMQ_HOST=54.188.26.217"
+Environment="RABBITMQ_PORT=5672"
+Environment="RABBITMQ_USERNAME=guest"
+Environment="RABBITMQ_PASSWORD=guest"
+
+# Consumer Configuration (20 threads - one per room for ordering guarantee)
+Environment="CONSUMER_THREADS=20"
+Environment="PREFETCH_COUNT=10"
+Environment="MAX_RETRIES=3"
+
+# Health Check Configuration
+Environment="HEALTH_PORT=8080"
+
+# Statistics Reporting
+Environment="STATS_INTERVAL=30"
+
+ExecStart=/usr/bin/java -Xmx512m -Xms256m -jar /home/ec2-user/consumer/chat-consumer.jar
+
+# Auto-restart on failure with limits
+Restart=always
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=chat-consumer
+
+[Install]
+WantedBy=multi-user.target

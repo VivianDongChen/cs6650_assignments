@@ -1,477 +1,311 @@
-# CS6650 Assignment 2 - Architecture Document
+# CS6650 Assignment 2: Architecture Document
 
-## System Architecture
+**Student:** [Your Name]
+**Course:** CS6650 Fall 2024
+**Date:** November 3, 2025
 
-### High-Level Architecture Diagram
+---
+
+## 1. System Architecture Overview
+
+### High-Level Architecture
 
 ```
-                    ┌─────────────────────────────────────────┐
-                    │         Test Client (Local)            │
-                    │  - Sends 500K messages                  │
-                    │  - Multi-threaded connections           │
-                    └──────────────┬──────────────────────────┘
-                                   │
-                                   │ WebSocket Connection
-                                   ↓
-                    ┌──────────────────────────────────────────┐
-                    │  AWS Application Load Balancer (ALB)    │
-                    │  - Sticky sessions enabled               │
-                    │  - Health check: /chat-server/           │
-                    │  - Distributes load across servers       │
-                    └──────────────┬───────────────────────────┘
-                                   │
-         ┌─────────────────────────┼─────────────────────────┐
-         │                         │                         │
-         ↓                         ↓                         ↓
-    ┌────────┐              ┌────────┐              ┌────────┐
-    │Server 1│              │Server 2│      ...     │Server 4│
-    │ EC2    │              │ EC2    │              │ EC2    │
-    │:8080   │              │:8080   │              │:8080   │
-    └───┬────┘              └───┬────┘              └───┬────┘
-        │                       │                       │
-        │     Publish to RabbitMQ (all servers)        │
-        └───────────────────────┼───────────────────────┘
-                                │
-                                ↓
-                ┌─────────────────────────────────────┐
-                │   RabbitMQ (54.188.26.217)         │
-                │                                     │
-                │  ┌──────────────────────────────┐  │
-                │  │ chat.exchange (topic)        │  │
-                │  │   routing: room.{roomId}     │  │
-                │  └────────────┬─────────────────┘  │
-                │               │                     │
-                │  ┌────────────▼─────────────────┐  │
-                │  │ Queues (durable, with DLX)   │  │
-                │  │  - room.1                    │  │
-                │  │  - room.2                    │  │
-                │  │  - ...                       │  │
-                │  │  - room.20                   │  │
-                │  └────────────┬─────────────────┘  │
-                │               │                     │
-                │  ┌────────────▼─────────────────┐  │
-                │  │ Dead Letter Queue            │  │
-                │  │  - chat.dlx (exchange)       │  │
-                │  │  - chat.dlq (queue)          │  │
-                │  └──────────────────────────────┘  │
-                └─────────────────┬───────────────────┘
-                                  │
-                                  │ Consume messages
-                                  ↓
-                ┌─────────────────────────────────────┐
-                │   Consumer (52.24.223.241)         │
-                │                                     │
-                │  ┌──────────────────────────────┐  │
-                │  │ MessageConsumer              │  │
-                │  │  - 20 threads                │  │
-                │  │  - One thread per room       │  │
-                │  │  - At-least-once delivery    │  │
-                │  └────────────┬─────────────────┘  │
-                │               │                     │
-                │  ┌────────────▼─────────────────┐  │
-                │  │ RoomManager                  │  │
-                │  │  - Duplicate detection       │  │
-                │  │  - Caffeine cache (5min TTL) │  │
-                │  │  - WebSocket broadcasting    │  │
-                │  └────────────┬─────────────────┘  │
-                │               │                     │
-                │  ┌────────────▼─────────────────┐  │
-                │  │ Health Server (:8080)        │  │
-                │  │  - /health endpoint          │  │
-                │  │  - Metrics reporting         │  │
-                │  └──────────────────────────────┘  │
-                └─────────────────────────────────────┘
-                                  │
-                                  │ Broadcast to
-                                  ↓
-                          Connected Clients
+┌─────────┐
+│ Client  │
+└────┬────┘
+     │ WebSocket
+     ▼
+┌────────────────────┐
+│  Application Load  │
+│    Balancer (ALB)  │
+└─────────┬──────────┘
+          │ Sticky Sessions
+          │
+    ┌─────┴──────┬──────────┬──────────┐
+    ▼            ▼          ▼          ▼
+┌────────┐  ┌────────┐ ┌────────┐ ┌────────┐
+│Server 1│  │Server 2│ │Server 3│ │Server 4│
+└───┬────┘  └───┬────┘ └───┬────┘ └───┬────┘
+    │           │          │          │
+    └───────────┴──────────┴──────────┘
+                │ Publish Messages
+                ▼
+        ┌──────────────┐
+        │   RabbitMQ   │
+        │ Topic Exchange│
+        └───────┬──────┘
+                │ 20 Queues (room.1-room.20)
+                ▼
+        ┌──────────────┐
+        │   Consumer   │
+        │ (20 Threads) │
+        └───────┬──────┘
+                │ Broadcast
+                ▼
+        ┌──────────────┐
+        │   Clients    │
+        │ (via WebSocket)│
+        └──────────────┘
+```
+
+### Component Details
+
+**Load Balancer:**
+- AWS Application Load Balancer
+- URL: cs6650-alb-631563720.us-west-2.elb.amazonaws.com
+- Sticky sessions enabled (AWSALB cookie)
+- Health checks every 30 seconds
+
+**Server Instances (4x t3.micro EC2):**
+- Server 1: 18.237.196.134
+- Server 2: 54.186.55.54
+- Server 3: 44.251.147.184
+- Server 4: 34.213.93.17
+- Each runs Apache Tomcat 9.0.82 with Server-v2 application
+
+**Message Queue:**
+- RabbitMQ 3.13.7 (Docker container)
+- Host: 18.246.237.223
+- Management UI: Port 15672
+- AMQP Port: 5672
+
+**Consumer Service:**
+- Dedicated EC2 instance: 34.216.219.207
+- Jetty WebSocket server on port 8080
+- Systemd service for auto-restart
+
+---
+
+## 2. Message Flow Sequence
+
+### Step-by-Step Message Journey
+
+```
+1. Client → ALB
+   WebSocket message sent to load balancer
+
+2. ALB → Server (via sticky session)
+   Routed to assigned server instance
+
+3. Server receives message
+   ├─→ Validate format
+   └─→ Create QueueMessage with metadata
+
+4. Server → RabbitMQ
+   ├─→ Borrow channel from pool
+   ├─→ Publish to chat.exchange
+   │   Routing key: room.{roomId}
+   └─→ Wait for publisher confirm
+
+5. Server → Client
+   Return ACK immediately
+
+6. RabbitMQ → Queue
+   Route to appropriate room queue
+
+7. Consumer pulls message
+   ├─→ Deserialize QueueMessage
+   ├─→ Check duplicates
+   └─→ Route to RoomManager
+
+8. RoomManager → Broadcast
+   Send to all WebSocket sessions in room
+
+9. Consumer → RabbitMQ
+   ACK message after successful broadcast
+
+10. Clients receive message
+    All participants in room get the message
 ```
 
 ---
 
-## Message Flow Sequence
+## 3. Queue Topology Design
 
-### 1. Client Sends Message
+### RabbitMQ Configuration
 
-```
-Client                Server               RabbitMQ            Consumer
-  |                     |                     |                   |
-  |--WebSocket msg----->|                     |                   |
-  |  {userId, text,     |                     |                   |
-  |   roomId}           |                     |                   |
-  |                     |                     |                   |
-```
+**Exchange:**
+- Name: `chat.exchange`
+- Type: `topic`
+- Durable: `true`
 
-### 2. Server Publishes to Queue
+**Routing Pattern:**
+- Routing key: `room.{roomId}`
+- Example: `room.1`, `room.2`, ..., `room.20`
 
-```
-Client                Server               RabbitMQ            Consumer
-  |                     |                     |                   |
-  |                     |--Publish QueueMsg-->|                   |
-  |                     |  to chat.exchange   |                   |
-  |                     |  routing: room.X    |                   |
-  |                     |                     |                   |
-  |                     |                     |--Store in-------->|
-  |                     |                     |  room.X queue     |
-  |<---ACK response-----|                     |                   |
-  |  {status: success}  |                     |                   |
-```
+**Queues (20 total):**
+- room.1 through room.20
+- Each bound to exchange with matching routing key
+- Durable queues (survive broker restart)
 
-### 3. Consumer Processes and Broadcasts
+**Queue Properties:**
+- Message TTL: 1 hour
+- Max length: 10,000 messages
+- Dead Letter Exchange configured
 
-```
-Client                Server               RabbitMQ            Consumer
-  |                     |                     |                   |
-  |                     |                     |<--Pull message----|
-  |                     |                     |  from room.X      |
-  |                     |                     |                   |
-  |                     |                     |                   |--Check duplicate
-  |                     |                     |                   |  (Caffeine cache)
-  |                     |                     |                   |
-  |                     |                     |                   |--Broadcast to
-  |                     |                     |                   |  all clients
-  |<----------------------------------------------WebSocket msg---|
-  |                     |                     |                   |
-  |                     |                     |<--ACK-------------|
-  |                     |                     |  (manual confirm) |
-```
+### Design Rationale
 
-### 4. Retry on Failure
+**One Queue Per Room:**
+- Guarantees message ordering within each room
+- Allows parallel processing across rooms
+- Isolated failure domains
 
-```
-Client                Server               RabbitMQ            Consumer
-  |                     |                     |                   |
-  |                     |                     |                   |--Broadcast fails
-  |                     |                     |                   |
-  |                     |                     |<--NACK (requeue)--|
-  |                     |                     |                   |
-  |                     |  [Wait backoff]     |                   |
-  |                     |                     |                   |
-  |                     |                     |--Retry delivery-->|
-  |                     |                     |                   |
-  |                     |     [After 3 retries fail]              |
-  |                     |                     |                   |
-  |                     |                     |<--Route to DLQ----|
-  |                     |                     |  (chat.dlq)       |
-```
+**Topic Exchange:**
+- Flexible routing by room ID
+- Industry standard for pub-sub
+- Future extensibility
 
 ---
 
-## Queue Topology Design
-
-### Exchange Configuration
-
-**Type**: Topic Exchange
-**Name**: `chat.exchange`
-**Durable**: Yes
-**Auto-delete**: No
-
-**Routing Pattern**:
-- Messages route by `room.{roomId}`
-- Example: Message to room 5 uses routing key `room.5`
-
-### Queue Configuration (20 Room Queues)
-
-**For each queue (room.1 to room.20)**:
-- **Durable**: Yes (survives RabbitMQ restart)
-- **Exclusive**: No (multiple consumers can connect)
-- **Auto-delete**: No (persists when no consumers)
-- **Arguments**:
-  - `x-dead-letter-exchange`: `chat.dlx`
-  - `x-dead-letter-routing-key`: `dlq`
-
-### Dead Letter Queue (DLQ)
-
-**Exchange**: `chat.dlx` (direct)
-**Queue**: `chat.dlq`
-**Purpose**: Store messages that exceed max retry count (3)
-
----
-
-## Consumer Threading Model
+## 4. Consumer Threading Model
 
 ### Thread Architecture
 
-**Total Threads**: 20 (configurable via `CONSUMER_THREADS`)
-**Distribution**: One thread per room queue
-**Purpose**: Guarantee FIFO message ordering within each room
-
 ```
-┌─────────────────────────────────────────┐
-│         Consumer Application            │
-│                                         │
-│  Thread 0  ──consume──> room.1         │
-│  Thread 1  ──consume──> room.2         │
-│  Thread 2  ──consume──> room.3         │
-│  Thread 3  ──consume──> room.4         │
-│     ...                                 │
-│  Thread 19 ──consume──> room.20        │
-│                                         │
-│  Each thread:                           │
-│    - Dedicated channel                  │
-│    - Prefetch count: 10 messages        │
-│    - Manual ACK/NACK                    │
-│    - Independent processing             │
-└─────────────────────────────────────────┘
+Consumer Application
+│
+├─→ Main Thread
+│   └─→ Initialize RabbitMQ connection
+│   └─→ Create 20 consumer threads
+│   └─→ Start health server (port 8080)
+│
+├─→ Thread 1  → room.1
+├─→ Thread 2  → room.2
+...
+└─→ Thread 20 → room.20
 ```
 
-### Message Processing Pipeline
+**Each Consumer Thread:**
+1. Subscribes to one queue
+2. Pulls messages (prefetch=10)
+3. Processes sequentially
+4. Broadcasts via RoomManager
+5. ACKs after successful broadcast
 
-```
-1. Pull from Queue
-   └─> basicConsume(queueName, autoAck=false)
+### Why This Design?
 
-2. Deserialize
-   └─> Jackson ObjectMapper
+**Message Ordering:**
+- Single thread per room ensures FIFO order
+- Critical for chat (messages must appear in send order)
 
-3. Check Duplicate
-   └─> Caffeine cache lookup by messageId
-   └─> If duplicate: skip and return
-   └─> Else: cache messageId with 5min TTL
+**Parallel Processing:**
+- 20 threads work simultaneously across rooms
+- High throughput while maintaining order
 
-4. Broadcast
-   └─> RoomManager.broadcastToRoom()
-   └─> Send to all WebSocket sessions in room
-
-5. Acknowledge
-   └─> SUCCESS: channel.basicAck()
-   └─> FAILURE: RetryHandler.handleFailedDelivery()
-       ├─> Retry < 3: channel.basicNack(requeue=true)
-       └─> Retry >= 3: send to DLQ
-```
+**Fault Isolation:**
+- Slow room doesn't block others
+- Failed message in one room doesn't affect others
 
 ---
 
-## Load Balancing Configuration
+## 5. Load Balancing Configuration
 
-### ALB Settings
+### ALB Setup
 
-**Listener**: HTTP on port 8080
-**Target Group**: cs6650-servers-tg
-**Target Type**: Instance
-**Protocol**: HTTP
-**Port**: 8080
+**Sticky Sessions:**
+- Enabled: Yes
+- Cookie: AWSALB
+- Duration: 24 hours
+- **Critical for WebSocket** (stateful connections)
 
-### Health Check Configuration
+**Health Checks:**
+- Path: `/chat-server/`
+- Interval: 30 seconds
+- Timeout: 5 seconds
+- Healthy threshold: 2
+- Unhealthy threshold: 2
 
-```
-Path: /chat-server/
-Interval: 30 seconds
-Timeout: 5 seconds
-Healthy threshold: 2
-Unhealthy threshold: 3
-```
+**Advanced Settings:**
+- Idle timeout: 120 seconds (long-lived WebSocket)
+- Connection draining: 300 seconds
 
-### Sticky Sessions (Critical for WebSocket)
+### Load Distribution
 
-**Enabled**: Yes
-**Duration**: 3600 seconds (1 hour)
-**Cookie Name**: AWSALB
+**Algorithm:** Round Robin + Sticky Sessions
+- First request → Round robin
+- Same client → Sticky session to same server
+- WebSocket upgrade → Maintained on same server
 
-**Why Required**: WebSocket connections are stateful. Once a client connects to a specific server, all subsequent messages must go to the same server to maintain the connection.
-
-### Target Registration
-
-```
-Target 1: cs6650-server-1 (instance-id-1) port 8080
-Target 2: cs6650-server-2 (instance-id-2) port 8080
-Target 3: cs6650-server-3 (instance-id-3) port 8080
-Target 4: cs6650-server-4 (instance-id-4) port 8080
-```
+**Expected Distribution:**
+- 4 servers sharing load evenly
+- ~25% traffic per server (ideal case)
 
 ---
 
-## Delivery Guarantees Implementation
+## 6. Failure Handling Strategies
 
-### 1. At-Least-Once Delivery
+### Server-Side Failures
 
-**Server Side (Producer)**:
-- Publisher confirms enabled: `channel.confirmSelect()`
-- Synchronous wait for confirm: `channel.waitForConfirmsOrDie(5000)`
-- Persistent messages: `MessageProperties.PERSISTENT_TEXT_PLAIN`
+**RabbitMQ Connection Failure:**
+- Auto-recovery enabled (10s interval)
+- Publisher returns error to client
+- Client can retry
 
-**Consumer Side**:
-- Manual acknowledgment mode: `autoAck = false`
-- ACK only after successful processing: `channel.basicAck()`
-- NACK on failure to requeue: `channel.basicNack(requeue=true)`
+**Channel Pool Exhaustion:**
+- Block and wait (30s timeout)
+- Return error if timeout
+- Proper cleanup in finally blocks
 
-### 2. Duplicate Message Handling
+**Publish Failure:**
+- Publisher confirms detect failures
+- Log error with messageId
+- Return NACK to client
 
-**Implementation**: Caffeine in-memory cache
+### Consumer-Side Failures
 
-```java
-Cache<String, Long> processedMessages = Caffeine.newBuilder()
-    .expireAfterWrite(5, TimeUnit.MINUTES)
-    .maximumSize(100000)
-    .build();
-```
+**Consumer Crash:**
+- Systemd auto-restarts service
+- Unacked messages return to queue
+- Consumer resumes from where it stopped
 
-**Logic**:
-1. Check if messageId exists in cache
-2. If exists: skip processing (duplicate detected)
-3. If not: process and cache messageId with timestamp
+**Broadcast Failure:**
+- Continue to other sessions
+- Increment failure metric
+- Still ACK message (processed)
 
-**Metrics**: `duplicatesDetected` counter tracks duplicate count
+**Duplicate Messages:**
+- messageId cache detects duplicates
+- Skip processing
+- ACK immediately
 
-### 3. Message Ordering Within Rooms
+### ALB Failures
 
-**Solution**: One thread per room queue
+**Target Unhealthy:**
+- Health check fails (2 consecutive)
+- Stop routing new connections
+- Drain existing connections (300s)
+- Route to healthy targets only
 
-- Each of 20 threads consumes from exactly one queue
-- RabbitMQ queues are FIFO by nature
-- Single consumer per queue guarantees order
-- No parallel processing within same room
+**All Targets Down:**
+- ALB returns 503
+- Client retries with backoff
 
-### 4. Failed Delivery Retry Logic
+### Network Failures
 
-**Retry Handler** (`RetryHandler.java`):
+**Server ↔ RabbitMQ Partition:**
+- Auto-recovery attempts reconnection
+- During outage: Servers return errors
+- Clients retry or switch servers (via ALB)
 
-```
-Attempt 1: Immediate retry (NACK + requeue)
-          └─> Backoff: 100ms
-
-Attempt 2: Retry after backoff
-          └─> Backoff: 200ms (exponential)
-
-Attempt 3: Final retry
-          └─> Backoff: 400ms
-
-After 3 failures:
-          └─> Route to Dead Letter Queue (chat.dlq)
-```
-
-**Exponential Backoff Formula**:
-```
-delay = 100ms × 2^retryCount
-```
+**Client Disconnect:**
+- Server removes session from RoomManager
+- Client reconnects → New session
+- Missed messages during disconnect are lost
 
 ---
 
-## Failure Handling Strategies
-
-### 1. Server Failure
-
-**Detection**: ALB health checks fail (3 consecutive failures)
-**Action**: ALB removes server from target group
-**Impact**: Remaining servers handle load
-**Recovery**: When server comes back online, ALB adds it back
-
-### 2. RabbitMQ Connection Failure
-
-**Detection**: IOException during publish
-**Action**:
-- Automatic reconnection (RabbitMQ client library)
-- Network recovery interval: 10 seconds
-- Connection timeout: 30 seconds
-
-**Fallback**: Circuit breaker pattern (not implemented, future work)
-
-### 3. Consumer Failure
-
-**Detection**: Process crash or systemd monitoring
-**Action**: systemd auto-restart
-**Configuration**:
-```ini
-Restart=always
-RestartSec=10
-StartLimitBurst=5
-```
-
-**Message Safety**: Unacknowledged messages return to queue
-
-### 4. Queue Overflow
-
-**Prevention**:
-- Consumer threads: 20 (matches queue count)
-- Prefetch count: 10 per thread
-- Capacity: 200 messages in-flight concurrently
-
-**Monitoring**: Track queue depth via RabbitMQ Management Console
-
----
-
-## Performance Characteristics
-
-### Throughput Expectations
-
-**Single Server**:
-- Expected: 5,000-10,000 msgs/sec
-- Bottleneck: Server CPU and RabbitMQ publish rate
-
-**2 Servers with ALB**:
-- Expected: 10,000-18,000 msgs/sec
-- Improvement: ~80-100% over single server
-
-**4 Servers with ALB**:
-- Expected: 20,000-35,000 msgs/sec
-- Improvement: ~200-250% over single server
-
-### Resource Utilization
-
-**Server EC2 (t2.small)**:
-- CPU: 50-70% under load
-- Memory: 512MB-1GB (Tomcat + connections)
-- Network: 10-50 Mbps
-
-**Consumer EC2 (t2.micro)**:
-- CPU: 30-50% under load
-- Memory: 256MB-512MB
-- Network: 5-20 Mbps
-
-**RabbitMQ EC2 (t2.small)**:
-- CPU: 40-60% under load
-- Memory: 512MB-1GB
-- Disk I/O: Minimal (in-memory processing)
-
----
-
-## Configuration Summary
-
-### Server Environment Variables
-
-```bash
-RABBITMQ_HOST=54.188.26.217
-RABBITMQ_PORT=5672
-RABBITMQ_USERNAME=guest
-RABBITMQ_PASSWORD=guest
-CHANNEL_POOL_SIZE=20
-```
-
-### Consumer Environment Variables
-
-```bash
-RABBITMQ_HOST=54.188.26.217
-RABBITMQ_PORT=5672
-RABBITMQ_USERNAME=guest
-RABBITMQ_PASSWORD=guest
-CONSUMER_THREADS=20
-PREFETCH_COUNT=10
-MAX_RETRIES=3
-HEALTH_PORT=8080
-STATS_INTERVAL=30
-```
-
-### Instance Configuration
-
-| Component | Instance Type | IP Address | Ports |
-|-----------|--------------|------------|-------|
-| RabbitMQ | t3.micro | 54.190.49.133 | 5672, 15672 |
-| Consumer | t3.micro | 34.214.37.149 | 8080 |
-| Server 1 | t3.micro | 34.212.226.25 | 8080 |
-| Server 2 | t3.micro | 44.243.190.97 | 8080 |
-| Server 3 | t3.micro | 44.251.238.69 | 8080 |
-| Server 4 | t3.micro | 54.190.99.98 | 8080 |
-| ALB | - | TBD | 80 |
-
----
-
-## Conclusion
+## Summary
 
 This architecture provides:
-- **Scalability**: Horizontal scaling via ALB
-- **Reliability**: At-least-once delivery with retries
-- **Performance**: Distributed load across multiple servers
-- **Monitoring**: Health checks and metrics at all levels
-- **Fault Tolerance**: Auto-restart and DLQ for failed messages
+- **High Availability:** 4 servers, automatic failover
+- **Scalability:** Horizontal scaling via ALB
+- **Reliability:** At-least-once delivery, auto-recovery
+- **Performance:** 3468 msg/s with 4 servers (+17% vs single server)
+- **Maintainability:** Clear separation of concerns
 
-The system successfully decouples message production (servers) from consumption (consumer), allowing independent scaling and failure isolation.
+Key design priorities:
+1. Message ordering within rooms
+2. Fault tolerance and recovery
+3. Operational simplicity
+4. Cost efficiency (t3.micro instances)

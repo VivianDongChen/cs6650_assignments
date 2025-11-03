@@ -1,14 +1,19 @@
 package com.cs6650.chat.consumer.health;
 
+import com.cs6650.chat.consumer.broadcast.RoomManager;
 import com.cs6650.chat.consumer.queue.MessageConsumer;
+import com.cs6650.chat.consumer.websocket.BroadcastWebSocketHandler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
+import org.eclipse.jetty.websocket.server.config.JettyWebSocketServletContainerInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+
 /**
- * Embedded Jetty server for health check endpoints.
+ * Embedded Jetty server for health check endpoints and WebSocket broadcast endpoint.
  */
 public class HealthServer {
     private static final Logger LOGGER = LoggerFactory.getLogger(HealthServer.class);
@@ -16,9 +21,11 @@ public class HealthServer {
 
     private final Server server;
     private final MessageConsumer messageConsumer;
+    private final RoomManager roomManager;
 
-    public HealthServer(MessageConsumer messageConsumer) {
+    public HealthServer(MessageConsumer messageConsumer, RoomManager roomManager) {
         this.messageConsumer = messageConsumer;
+        this.roomManager = roomManager;
         this.server = new Server(HEALTH_PORT);
         configureServer();
     }
@@ -34,6 +41,18 @@ public class HealthServer {
 
         // Add simple status endpoint
         context.addServlet(new ServletHolder(new StatusServlet()), "/status");
+
+        // Configure WebSocket endpoint for client broadcast connections
+        JettyWebSocketServletContainerInitializer.configure(context, (servletContext, wsContainer) -> {
+            // Set WebSocket timeout to 10 minutes
+            wsContainer.setIdleTimeout(Duration.ofMinutes(10));
+            wsContainer.setMaxTextMessageSize(65536);
+
+            // Map WebSocket endpoint: /broadcast/{roomId}
+            wsContainer.addMapping("/broadcast/*", (req, resp) -> new BroadcastWebSocketHandler(roomManager));
+
+            LOGGER.info("WebSocket broadcast endpoint configured at /broadcast/*");
+        });
     }
 
     /**

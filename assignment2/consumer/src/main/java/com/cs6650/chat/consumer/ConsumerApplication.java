@@ -38,8 +38,8 @@ public class ConsumerApplication {
             // Start consuming messages
             messageConsumer.startConsuming();
 
-            // Start health check server
-            healthServer = new HealthServer(messageConsumer);
+            // Start health check server with WebSocket broadcast endpoint
+            healthServer = new HealthServer(messageConsumer, roomManager);
             healthServer.start();
 
             LOGGER.info("Consumer application started successfully");

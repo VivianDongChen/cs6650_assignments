@@ -1,9 +1,9 @@
 #!/bin/bash
-# Setup RabbitMQ on EC2: 54.190.49.133
+# Setup RabbitMQ on EC2: 18.246.237.223
 
 set -e
 
-RABBITMQ_IP="54.190.49.133"
+RABBITMQ_IP="18.246.237.223"
 KEY_PATH="/Users/chendong/Desktop/6650/cs6650-hw2-key.pem"
 
 echo "=========================================="
@@ -79,7 +79,7 @@ echo "============================================"
 echo "RabbitMQ Setup Complete!"
 echo "============================================"
 echo ""
-echo "Management Console: http://54.190.49.133:15672"
+echo "Management Console: http://18.246.237.223:15672"
 echo "Username: guest"
 echo "Password: guest"
 echo ""

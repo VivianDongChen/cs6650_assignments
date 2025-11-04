@@ -8,8 +8,8 @@ echo "========================================="
 echo "Test 3: ALB with 4 Servers Performance Test"
 echo "========================================="
 echo "Configuration:"
-echo "  - Threads: 256"
-echo "  - Total Messages: 500,000"
+echo "  - Threads: 64"
+echo "  - Total Messages: 200,000"
 echo "  - ALB: cs6650-alb-631563720.us-west-2.elb.amazonaws.com:8080"
 echo "  - Servers: 4 (All servers)"
 echo "========================================="
@@ -27,8 +27,9 @@ echo ""
 cd "$OUTPUT_DIR"
 java -jar "$CLIENT_JAR" \
   --server-uri="$SERVER_URI" \
-  --total-messages=500000 \
-  --main-threads=256
+  --total-messages=200000 \
+  --main-threads=64 \
+  --warmup-threads=0
 
 echo ""
 echo "Test completed at $(date)"

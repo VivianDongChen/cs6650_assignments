@@ -1,98 +1,123 @@
 # CS6650 Assignment 2 - Distributed Chat System
 
-完整的分布式聊天系统实现，使用RabbitMQ消息队列和AWS负载均衡。
+Complete distributed chat system implementation using RabbitMQ message queue and AWS load balancing.
 
-## 📁 项目结构
+## Project Structure
 
 ```
 assignment2/
-├── 📄 ARCHITECTURE_DOCUMENT.md          # 完整架构文档（用于提交）
-├── 📄 SUBMISSION_GUIDE.md               # PDF提交指南
-├── 📄 ASSIGNMENT2_REQUIREMENTS_CHECK.md # 需求验证清单
+├── ARCHITECTURE_DOCUMENT.md          # Complete architecture documentation
+├── Assignment2_Submission.md         # Final submission document (for PDF export)
 │
-├── 📁 server-v2/                        # Server源码（RabbitMQ集成）
+├── server-v2/                        # Server source code (RabbitMQ integration)
 │   ├── src/
 │   ├── pom.xml
-│   └── target/chat-server.war           # 构建产物
+│   └── target/chat-server.war        # Build artifact
 │
-├── 📁 consumer/                         # Consumer应用源码
+├── consumer/                         # Consumer application source code
 │   ├── src/
 │   ├── pom.xml
-│   └── target/chat-consumer.jar         # 构建产物
+│   └── target/chat-consumer.jar      # Build artifact
 │
-├── 📁 deployment/                       # 部署脚本
-│   ├── SETUP_ALL.sh                     # 一键部署所有组件
-│   ├── setup-rabbitmq.sh                # 部署RabbitMQ
-│   ├── setup-consumer.sh                # 部署Consumer
-│   ├── deploy-all-servers.sh            # 部署4个Server实例
-│   └── restart-all-tomcat.sh            # 重启所有Tomcat
+├── deployment/                       # Deployment scripts
+│   ├── SETUP_ALL.sh                  # One-command deployment
+│   ├── setup-rabbitmq.sh             # Deploy RabbitMQ
+│   ├── setup-consumer.sh             # Deploy Consumer
+│   ├── deploy-all-servers.sh         # Deploy 4 Server instances
+│   └── restart-all-tomcat.sh         # Restart all Tomcat servers
 │
-├── 📁 testing/                          # 性能测试脚本
-│   ├── run-test1-single-server.sh       # Test 1: 单服务器基准测试
-│   ├── run-test2-alb-2servers.sh        # Test 2: 2服务器负载均衡
-│   ├── run-test3-alb-4servers.sh        # Test 3: 4服务器负载均衡
-│   ├── run-tuning-tests.sh              # 系统调优测试
-│   └── run-quick-test-for-screenshots.sh # 截图助手脚本
+├── testing/                          # Performance test scripts
+│   ├── run-test1-single-server.sh    # Test 1: Single server baseline
+│   ├── run-test2-alb-2servers.sh     # Test 2: 2 servers with ALB
+│   ├── run-test3-alb-4servers.sh     # Test 3: 4 servers with ALB
+│   ├── run-tuning-tests.sh           # System tuning tests
+│   └── run-quick-test-for-screenshots.sh # Screenshot helper script
 │
-└── 📁 results/                          # 测试结果
-    ├── output/                          # 测试输出文件
-    └── tuning/                          # 调优结果
+├── monitoring/                       # Monitoring scripts
+│   ├── check-system-health.sh        # System health verification
+│   ├── monitor-rabbitmq.sh           # RabbitMQ monitoring
+│   └── collect-system-metrics.sh     # System metrics collection
+│
+└── results/                          # Test results
+    ├── output/                       # Test output files
+    └── tuning/                       # Tuning results
 ```
 
-## 🎯 快速开始
-
-### 明天需要做的（40-60分钟）：
-
-1. **收集截图** (15-20分钟)
-   ```bash
-   # 运行截图助手脚本
-   cd testing
-   ./run-quick-test-for-screenshots.sh
-   
-   # 同时打开浏览器
-   # RabbitMQ: http://18.246.237.223:15672 (guest/guest)
-   # AWS Console: EC2 → Load Balancers → cs6650-alb → Monitoring
-   ```
-
-2. **创建PDF** (20-30分钟)
-   - 打开 `SUBMISSION_GUIDE.md`
-   - 按照模板结构创建13页PDF
-   - 所有文字内容已准备好，只需复制粘贴
-   - 插入5张截图
-
-## 🏗️ 系统架构
+## System Architecture
 
 ```
 Client → ALB → [4 Servers] → RabbitMQ → Consumer → WebSocket Broadcast
 ```
 
-### 组件清单：
-- **RabbitMQ**: 18.246.237.223 (Docker)
-- **Consumer**: 34.216.219.207 (Systemd service)
-- **Server 1-4**: 4x t3.micro EC2实例
+### Component List:
+- **RabbitMQ**: 54.245.205.40 (Docker)
+- **Consumer**: 54.70.61.198 (Systemd service)
+- **Server 1-4**: 4x t3.micro EC2 instances
+  - 44.254.79.143
+  - 50.112.195.157
+  - 54.214.123.172
+  - 54.190.115.9
 - **ALB**: cs6650-alb-631563720.us-west-2.elb.amazonaws.com
 
-## 📊 性能测试结果
+## Performance Test Results
 
-- **Test 1** (单服务器): 2960.65 msg/s
-- **Test 2** (2服务器): 3512.96 msg/s (+18.7%)
-- **Test 3** (4服务器): 3468.66 msg/s (+17.2%)
-- **最优线程数**: 256
+- **Test 1** (Single server): 2,960.65 msg/s (baseline)
+- **Test 2** (2 servers): 3,512.96 msg/s (+18.7% improvement)
+- **Test 3** (4 servers): 3,468.66 msg/s (+17.2% improvement)
+- **Optimal thread count**: 256 client threads
 
-## ✅ 完成状态
+## Quick Start
 
-- [x] Part 1: Queue Integration
-- [x] Part 2: Consumer Implementation
-- [x] Part 3: Load Balancing
-- [x] Part 4: System Tuning
-- [x] Performance Testing (3 tests)
-- [ ] 收集截图（明天）
-- [ ] 创建PDF（明天）
+### Deploy All Components:
+```bash
+cd deployment
+./SETUP_ALL.sh
+```
 
-## 📝 文档说明
+### Run Performance Tests:
+```bash
+cd testing
+./run-test1-single-server.sh
+./run-test2-alb-2servers.sh
+./run-test3-alb-4servers.sh
+```
 
-- `ARCHITECTURE_DOCUMENT.md` - 完整的架构文档（6个部分）
-- `SUBMISSION_GUIDE.md` - PDF提交指南和模板
-- `ASSIGNMENT2_REQUIREMENTS_CHECK.md` - 需求验证清单
+### Monitor System Health:
+```bash
+cd monitoring
+./check-system-health.sh
+./monitor-rabbitmq.sh
+```
 
-所有技术实现100%完成！🎉
+## Submission
+
+**What to submit:** PDF exported from `Assignment2_Submission.md`
+
+The submission document includes:
+1. System architecture diagrams
+2. Implementation details
+3. Configuration details
+4. Performance test results with screenshots
+
+## Implementation Status
+
+- Part 1: Queue Integration (RabbitMQ with topic exchange)
+- Part 2: Consumer Implementation (20 threads, one per room)
+- Part 3: Load Balancing (ALB with 4 servers, sticky sessions)
+- Part 4: System Tuning (optimal: 256 client threads)
+- Performance Testing (3 tests completed)
+- Documentation (complete submission document ready)
+
+All technical implementation is 100% complete!
+
+## Key Design Decisions
+
+**Message Ordering**: Single consumer thread per room ensures FIFO message delivery
+
+**Scalability**: Topic exchange enables flexible routing, horizontal server scaling via ALB
+
+**Reliability**: Publisher confirms, dead letter queue, systemd auto-restart for consumer
+
+**Performance**: Channel pooling (20 channels), prefetch count tuning (10 messages)
+
+**Monitoring**: Health endpoints, RabbitMQ management console, CloudWatch metrics

@@ -1,55 +1,67 @@
 # Assignment 2 Deployment Guide
 
-This directory contains deployment scripts and configuration for AWS infrastructure.
+Deployment scripts and configuration for AWS infrastructure.
 
 ## Contents
 
-- `setup-rabbitmq-ec2.sh` - Automated RabbitMQ installation script for EC2
-- `setup-rabbitmq-queues.sh` - Script to create exchange and queues in RabbitMQ
-- `EC2_DEPLOYMENT_GUIDE.md` - Detailed deployment instructions
-- `alb-config.json` - Application Load Balancer configuration (Part 3)
+- `SETUP_ALL.sh` - One-command deployment for all components
+- `setup-rabbitmq.sh` - RabbitMQ installation and queue setup
+- `setup-consumer.sh` - Consumer application deployment
+- `deploy-all-servers.sh` - Deploy server-v2 to 4 EC2 instances
+- `restart-all-tomcat.sh` - Restart all Tomcat servers
+- `ALB_CONFIGURATION.md` - Application Load Balancer configuration
 
 ## Quick Start
 
-### 1. Deploy RabbitMQ to EC2
+### One-Command Deployment
 
 ```bash
-# SSH to your EC2 instance
-ssh -i your-key.pem ec2-user@YOUR-EC2-IP
-
-# Run the installation script
-bash setup-rabbitmq-ec2.sh
+./SETUP_ALL.sh
 ```
 
-### 2. Configure Exchange and Queues
+This will deploy:
+1. RabbitMQ server with exchange and queues
+2. Consumer application
+3. All 4 server instances
+
+### Manual Deployment
+
+If you prefer step-by-step:
 
 ```bash
-# On the same EC2 instance
-bash setup-rabbitmq-queues.sh
+# 1. Deploy RabbitMQ
+./setup-rabbitmq.sh
+
+# 2. Deploy Consumer
+./setup-consumer.sh
+
+# 3. Deploy Servers
+./deploy-all-servers.sh
 ```
 
-### 3. Verify Installation
+### Verify Installation
 
 Access RabbitMQ Management Console:
-- URL: http://YOUR-EC2-IP:15672
+- URL: http://54.245.205.40:15672
 - Username: guest
 - Password: guest
 
 Check for:
 - 1 Exchange: chat.exchange (type: topic)
-- 20 Queues: room.1 through room.20
+- 21 Queues: room.1-20 + chat.dlq
 - 20 Bindings with routing keys
 
-## Environment Variables
+## System Architecture
 
-Configure your server and consumer applications:
-
-```bash
-export RABBITMQ_HOST=YOUR-EC2-PUBLIC-IP
-export RABBITMQ_PORT=5672
-export RABBITMQ_USERNAME=guest
-export RABBITMQ_PASSWORD=guest
 ```
+Client → ALB → [4 Servers] → RabbitMQ → Consumer → WebSocket Broadcast
+```
+
+**Deployed Components:**
+- RabbitMQ: 54.245.205.40
+- Consumer: 54.70.61.198
+- Server 1-4: 44.254.79.143, 50.112.195.157, 54.214.123.172, 54.190.115.9
+- ALB: cs6650-alb-631563720.us-west-2.elb.amazonaws.com
 
 ## Security Group Requirements
 

@@ -3,8 +3,8 @@
 
 set -e
 
-CONSUMER_IP="34.216.219.207"
-RABBITMQ_IP="18.246.237.223"
+CONSUMER_IP="54.70.61.198"
+RABBITMQ_IP="54.245.205.40"
 KEY_PATH="/Users/chendong/Desktop/6650/cs6650-hw2-key.pem"
 JAR_PATH="/Users/chendong/Desktop/6650/cs6650_assignments/assignment2/consumer/target/chat-consumer.jar"
 
@@ -36,7 +36,7 @@ Type=simple
 User=ec2-user
 WorkingDirectory=/home/ec2-user/consumer
 
-Environment="RABBITMQ_HOST=18.246.237.223"
+Environment="RABBITMQ_HOST=54.245.205.40"
 Environment="RABBITMQ_PORT=5672"
 Environment="RABBITMQ_USERNAME=guest"
 Environment="RABBITMQ_PASSWORD=guest"

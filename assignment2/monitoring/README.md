@@ -24,23 +24,23 @@ Complete system health check script.
 CS6650 Assignment 2 - System Health Check
 =========================================
 
-1. RabbitMQ Health (18.246.237.223)
-   ✓ RabbitMQ Management: Accessible (HTTP 200)
-   ✓ Queues: 20
+1. RabbitMQ Health (54.245.205.40)
+   [OK] RabbitMQ Management: Accessible (HTTP 200)
+   [OK] Queues: 21
 
-2. Consumer Health (34.216.219.207)
-   ✓ Consumer: Healthy (HTTP 200)
+2. Consumer Health (54.70.61.198)
+   [OK] Consumer: Healthy (HTTP 200)
    Messages Processed: 1234567
    Broadcasts Succeeded: 1234567
 
 3. Server Instances
-   ✓ Server 1 (18.237.196.134): Running (HTTP 200)
-   ✓ Server 2 (54.186.55.54): Running (HTTP 200)
-   ✓ Server 3 (44.251.147.184): Running (HTTP 200)
-   ✓ Server 4 (34.213.93.17): Running (HTTP 200)
+   [OK] Server 1 (44.254.79.143): Running (HTTP 200)
+   [OK] Server 2 (50.112.195.157): Running (HTTP 200)
+   [OK] Server 3 (54.214.123.172): Running (HTTP 200)
+   [OK] Server 4 (54.190.115.9): Running (HTTP 200)
 
 4. Application Load Balancer
-   ✓ ALB: Accessible (HTTP 200)
+   [OK] ALB: Accessible (HTTP 200)
 
 Summary:
 System Status: ALL HEALTHY (6/6 components)
@@ -121,7 +121,7 @@ Active Connections: 24
 ## Manual Monitoring Methods
 
 ### RabbitMQ Management Console
-**URL:** http://18.246.237.223:15672
+**URL:** http://54.245.205.40:15672
 **Username:** guest
 **Password:** guest
 
@@ -134,12 +134,12 @@ Active Connections: 24
 ### Consumer Health Endpoint
 **Health Check:**
 ```bash
-curl http://34.216.219.207:8080/health | python3 -m json.tool
+curl http://54.70.61.198:8080/health | python3 -m json.tool
 ```
 
 **Status Endpoint:**
 ```bash
-curl http://34.216.219.207:8080/status | python3 -m json.tool
+curl http://54.70.61.198:8080/status | python3 -m json.tool
 ```
 
 **Returned Metrics:**
@@ -204,22 +204,22 @@ watch -n 10 ./monitor-rabbitmq.sh
 ### Issue: RabbitMQ Unreachable
 ```bash
 # Check RabbitMQ container status
-ssh ec2-user@18.246.237.223 "docker ps | grep rabbitmq"
+ssh ec2-user@54.245.205.40 "docker ps | grep rabbitmq"
 
 # Restart RabbitMQ
-ssh ec2-user@18.246.237.223 "docker restart rabbitmq"
+ssh ec2-user@54.245.205.40 "docker restart rabbitmq"
 ```
 
 ### Issue: Consumer Unhealthy
 ```bash
 # Check Consumer service status
-ssh ec2-user@34.216.219.207 "sudo systemctl status chat-consumer"
+ssh ec2-user@54.70.61.198 "sudo systemctl status chat-consumer"
 
 # View Consumer logs
-ssh ec2-user@34.216.219.207 "sudo journalctl -u chat-consumer -f"
+ssh ec2-user@54.70.61.198 "sudo journalctl -u chat-consumer -f"
 
 # Restart Consumer
-ssh ec2-user@34.216.219.207 "sudo systemctl restart chat-consumer"
+ssh ec2-user@54.70.61.198 "sudo systemctl restart chat-consumer"
 ```
 
 ### Issue: Server Not Responding

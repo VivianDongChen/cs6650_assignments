@@ -16,8 +16,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Adapter to wrap Jetty's WebSocket Session as javax.websocket.Session.
- * This allows RoomManager (which expects javax.websocket.Session) to work with Jetty sessions.
+ * Adapter: wraps Jetty WebSocket Session as javax.websocket.Session.
+ * RoomManager expects javax.websocket.Session, so we adapt Jetty sessions.
  */
 public class JettySessionAdapter implements javax.websocket.Session {
     private final Session jettySession;

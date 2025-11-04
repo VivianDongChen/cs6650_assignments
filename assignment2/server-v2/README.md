@@ -1,6 +1,6 @@
 # Server Module
 
-This module hosts the Assignment 1 WebSocket server implementation. The service exposes two endpoints:
+WebSocket server with RabbitMQ integration. Two endpoints:
 
 - `/chat/{roomId}` – WebSocket endpoint that validates incoming JSON and echoes the payload with server timestamps.
 - `/health` – REST endpoint returning a JSON `{status,timestamp}` for liveness checks.

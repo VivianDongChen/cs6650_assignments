@@ -1,6 +1,6 @@
 # CS6650 Assignment 3: Persistence and Data Management for Distributed Chat System
 
-**Student**: Dong Chen  呃，你这里面是不是应该提供一些 graph？呃，看一下。 
+**Student**: Dong Chen   
 **GitHub Repository**: https://github.com/VivianDongChen/cs6650_assignments
 
 ---
@@ -96,10 +96,10 @@ CREATE INDEX idx_messages_user_room ON messages(user_id, room_id, timestamp DESC
 
 | Query Type | Target | Actual | Status |
 |------------|--------|--------|--------|
-| Room messages (1K) | < 100ms | 8ms | ✓ Pass |
-| User history | < 200ms | 10ms | ✓ Pass |
-| Active users count | < 500ms | 25ms | ✓ Pass |
-| User's rooms | < 50ms | 12ms | ✓ Pass |
+| Room messages (1K) | < 100ms | 8ms | Pass |
+| User history | < 200ms | 10ms | Pass |
+| Active users count | < 500ms | 25ms | Pass |
+| User's rooms | < 50ms | 12ms | Pass |
 
 ---
 
@@ -233,11 +233,11 @@ The distributed chat system processed **6.9 million messages** across three load
 | 10-15 min | 1,698,576 | 5,972 | -0.9% |
 
 **Findings**:
-- ✓ Throughput stable throughout 15 minutes (<6% variance)
-- ✓ Zero failures over 5.4M messages
-- ✓ Resources stable: CPU 3-10%, Memory 60-80MB free, IOPS 2-4/sec
-- ✓ No connection pool exhaustion (1-2 active connections)
-- ✓ No memory leaks (GC reclaimed memory effectively)
+- Throughput stable throughout 15 minutes (<6% variance)
+- Zero failures over 5.4M messages
+- Resources stable: CPU 3-10%, Memory 60-80MB free, IOPS 2-4/sec
+- No connection pool exhaustion (1-2 active connections)
+- No memory leaks (GC reclaimed memory effectively)
 
 **Evidence**: [load-tests/endurance_test_results.json](load-tests/endurance_test_results.json), [load-tests/endurance_monitoring.txt](load-tests/endurance_monitoring.txt), [load-tests/screenshots/](load-tests/screenshots/)
 
@@ -355,7 +355,7 @@ The distributed chat system processed **6.9 million messages** across three load
 | +5-15min | 0 | 5,988 msg/sec | 5,988 msg/sec | Sustained |
 | End | 0 | 0 | 0 | Drained |
 
-**Summary**: ✓ Queue drained in 2 min. ✓ Steady state at 0 depth. ✓ No message loss. ✓ No backlog over 15 minutes.
+**Summary**: Queue drained in 2 minutes. Steady state at 0 depth maintained. No message loss occurred. No backlog accumulated over 15 minutes.
 
 ### 4.2 Database Performance Metrics
 
@@ -379,7 +379,7 @@ The distributed chat system processed **6.9 million messages** across three load
 | GC Count | 0 | 12 | 25 | 38 | 40 |
 | GC Time | 0ms | 150ms | 310ms | 480ms | 500ms |
 
-**Analysis**: ✓ No memory leak (stabilized at 280-290 MB). ✓ Minor GCs every 20s. ✓ 100+ MB headroom. ✓ GC effectively reclaimed memory.
+**Analysis**: No memory leak detected (heap stabilized at 280-290 MB). Minor GCs occurred every 20 seconds. 100+ MB headroom remained available. GC effectively reclaimed memory throughout the test.
 
 **Database Memory**: 60-80 MB freeable (stable), 95%+ cache hit ratio (minimal disk I/O).
 
@@ -394,7 +394,7 @@ The distributed chat system processed **6.9 million messages** across three load
 | Acquisition | <1ms | 100% pool hit |
 | Utilization | 20% | 80% headroom |
 
-**Performance**: ✓ No timeout errors. ✓ No SQL exceptions. ✓ Stable pool size. ✓ Zero connection failures.
+**Performance**: No timeout errors occurred. No SQL exceptions encountered. Pool size remained stable. Zero connection failures recorded.
 
 ---
 
@@ -482,13 +482,13 @@ The distributed chat system processed **6.9 million messages** across three load
 
 | Requirement | Target | Achieved | Status |
 |-------------|--------|----------|--------|
-| Baseline (500K) | Complete | 7,813 msg/sec, 100% | ✓ |
-| Stress (1M) | Complete | 7,880 msg/sec, 100% | ✓ |
-| Endurance | 80%, 15+ min | 5,988 msg/sec (95.4%), 15 min | ✓ |
-| Room messages | < 100ms | 8ms | ✓ |
-| User history | < 200ms | 10ms | ✓ |
-| Active users | < 500ms | 25ms | ✓ |
-| User's rooms | < 50ms | 12ms | ✓ |
+| Baseline (500K) | Complete | 7,813 msg/sec, 100% | Pass |
+| Stress (1M) | Complete | 7,880 msg/sec, 100% | Pass |
+| Endurance | 80%, 15+ min | 5,988 msg/sec (95.4%), 15 min | Pass |
+| Room messages | < 100ms | 8ms | Pass |
+| User history | < 200ms | 10ms | Pass |
+| Active users | < 500ms | 25ms | Pass |
+| User's rooms | < 50ms | 12ms | Pass |
 
 **All targets met or exceeded.**
 
@@ -518,6 +518,13 @@ INSERT_SQL = "INSERT INTO messages (...) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (
 PREFETCH_COUNT = 1000
 QUEUE_NAME = "room.*"
 EXCHANGE = "chat.exchange"
+```
+
+### Circuit Breaker
+```java
+CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5
+CIRCUIT_BREAKER_TIMEOUT_MS = 60000
+CIRCUIT_BREAKER_HALF_OPEN_AFTER_MS = 30000
 ```
 
 See [config/database.properties](config/database.properties) for complete configuration.

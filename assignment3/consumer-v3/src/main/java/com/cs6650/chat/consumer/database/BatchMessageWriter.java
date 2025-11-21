@@ -219,7 +219,7 @@ public class BatchMessageWriter {
                 }
             }
 
-            // TODO: Consider implementing retry logic or DLQ for failed batches
+            // Note: Retry logic handled at message level by RetryHandler
 
         } finally {
             // Close resources

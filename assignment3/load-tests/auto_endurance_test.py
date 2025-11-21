@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-自动化30分钟Endurance Test
-- 自动监控metrics
-- 自动记录数据
-- 自动生成报告
+Automated 30-minute Endurance Test
+- Monitors metrics automatically
+- Records data continuously
+- Generates comprehensive report
 """
 
 import subprocess

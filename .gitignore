@@ -29,3 +29,14 @@ logs/
 *.key
 credentials.json
 .env
+
+# Python
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt

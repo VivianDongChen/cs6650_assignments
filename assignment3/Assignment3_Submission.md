@@ -1,6 +1,6 @@
 # CS6650 Assignment 3: Persistence and Data Management for Distributed Chat System
 
-**Student**: Dong Chen  
+**Student**: Dong Chen  呃，你这里面是不是应该提供一些 graph？呃，看一下。 
 **GitHub Repository**: https://github.com/VivianDongChen/cs6650_assignments
 
 ---
@@ -336,16 +336,26 @@ The distributed chat system processed **6.9 million messages** across three load
 
 ### 4.1 Queue Depth
 
-**RabbitMQ Behavior**:
+#### Queue Depth Over Time
+![Queue Depth](load-tests/screenshots/queue_depth.png)
 
+**Analysis**: Queue depth peaked at 50,000 messages within 30 seconds of test start, then drained completely to 0 by the 2-minute mark. The consumer successfully matched the publisher rate of 7,880 msg/sec, maintaining steady state at 0 depth for the remainder of the test. No message loss or backlog occurred.
+
+#### 15-Minute Endurance Test
+![Queue Depth Endurance](load-tests/screenshots/queue_depth_endurance.png)
+
+**Endurance Analysis**: During the 15-minute sustained test, queue depth remained at 0 for over 13 minutes after the initial 2-minute drain period. This demonstrates excellent consumer performance and system stability under prolonged load.
+
+**Key Metrics**:
 | Time | Queue Depth | Consumer Rate | Publisher Rate | Status |
 |------|-------------|---------------|----------------|--------|
 | Start | 0 | 0 | 0 | Idle |
 | +30s | 50,000 | 7,500 msg/sec | 7,880 msg/sec | Peak |
 | +2min | 0 | 7,880 msg/sec | 7,880 msg/sec | Steady |
+| +5-15min | 0 | 5,988 msg/sec | 5,988 msg/sec | Sustained |
 | End | 0 | 0 | 0 | Drained |
 
-**Analysis**: ✓ Queue drained in 2 min. ✓ Steady state at 0 depth. ✓ No message loss. ✓ No backlog.
+**Summary**: ✓ Queue drained in 2 min. ✓ Steady state at 0 depth. ✓ No message loss. ✓ No backlog over 15 minutes.
 
 ### 4.2 Database Performance Metrics
 

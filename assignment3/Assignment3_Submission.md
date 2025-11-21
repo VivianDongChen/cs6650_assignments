@@ -9,168 +9,54 @@
 
 ## 1. Database Choice Justification
 
-### PostgreSQL 16.6 on AWS RDS
+**PostgreSQL 16.6 on AWS RDS** selected for ACID compliance, advanced indexing (B-tree, BRIN, covering), materialized views, and proven performance (5,988 msg/sec sustained). AWS RDS: automated backups, monitoring, scaling. **Deployment**: db.t3.micro (2 vCPU, 1GB RAM), 20GB GP3 SSD, us-west-2.
 
-**Selection Rationale**: PostgreSQL was selected for its ACID compliance, advanced indexing capabilities (B-tree, BRIN, covering indexes), materialized views for analytics, and proven performance at scale (5,988 msg/sec sustained throughput). AWS RDS provides automated backups, monitoring, and scaling.
-
-**Deployment**: db.t3.micro (2 vCPUs, 1 GB RAM), 20 GB GP3 SSD, us-west-2 region.
-
----
-
-## 2. Complete Schema Design
-
-### 2.1 Primary Table
+## 2. Schema Design
 
 ```sql
 CREATE TABLE messages (
-    message_id    VARCHAR(64) PRIMARY KEY,     -- Unique identifier, supports UUID/snowflake
-    room_id       INTEGER NOT NULL,            -- Numeric for efficient indexing
-    user_id       VARCHAR(64) NOT NULL,        -- Flexible user identification
-    content       TEXT NOT NULL,               -- Unlimited message length (TOAST)
-    timestamp     TIMESTAMPTZ NOT NULL,        -- Timezone-aware ordering
-    created_at    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP  -- Audit trail
+    message_id VARCHAR(64) PRIMARY KEY, room_id INTEGER NOT NULL,
+    user_id VARCHAR(64) NOT NULL, content TEXT NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Analytics: user_stats, room_stats materialized views
+-- Impact: 2,000ms → 10ms (200x speedup)
 ```
-
-**Storage**: 1.3M messages = 2.1 GB total (800 MB table + 1.3 GB indexes). Avg row: 200 bytes data + 1,400 bytes index overhead.
-
-### 2.2 Materialized Views
-
-```sql
--- User Statistics
-CREATE MATERIALIZED VIEW user_stats AS
-SELECT user_id, COUNT(*) as message_count, COUNT(DISTINCT room_id) as rooms_participated,
-       MIN(timestamp) as first_message, MAX(timestamp) as last_message
-FROM messages GROUP BY user_id;
-
--- Room Statistics  
-CREATE MATERIALIZED VIEW room_stats AS
-SELECT room_id, COUNT(*) as message_count, COUNT(DISTINCT user_id) as unique_users,
-       MIN(timestamp) as first_message, MAX(timestamp) as last_activity
-FROM messages GROUP BY room_id;
-
--- Hourly Distribution
-CREATE MATERIALIZED VIEW hourly_stats AS
-SELECT DATE_TRUNC('hour', timestamp) as hour, COUNT(*) as message_count,
-       COUNT(DISTINCT user_id) as unique_users, COUNT(DISTINCT room_id) as active_rooms
-FROM messages GROUP BY DATE_TRUNC('hour', timestamp);
-```
-
-**Purpose**: Pre-aggregate analytics data, reduce query time from 2,000ms to <10ms.
-
----
+**Storage**: 1.3M msgs = 2.1GB (800MB table + 1.3GB indexes).
 
 ## 3. Indexing Strategy
 
-### 3.1 Five Strategic Indexes
-
 ```sql
--- 1. Primary Key (automatic): Uniqueness + point lookups
--- 2. Room Timeline (Covering): Fast room message retrieval
-CREATE INDEX idx_messages_room_time ON messages(room_id, timestamp DESC) 
+-- 1. PK (auto): Uniqueness
+-- 2. Room Timeline (covering): 150ms → 8ms
+CREATE INDEX idx_messages_room_time ON messages(room_id, timestamp DESC)
 INCLUDE (user_id, content);
 
--- 3. User History (Covering): Fast user message history  
-CREATE INDEX idx_messages_user_time ON messages(user_id, timestamp DESC) 
+-- 3. User History (covering): 200ms → 10ms
+CREATE INDEX idx_messages_user_time ON messages(user_id, timestamp DESC)
 INCLUDE (room_id, content);
 
--- 4. Time-Range (BRIN): Space-efficient time-series queries
+-- 4. BRIN Timestamp: 500ms → 25ms (20MB only)
 CREATE INDEX idx_messages_timestamp_brin ON messages USING BRIN(timestamp);
 
--- 5. User-Room Participation: Analytics queries
+-- 5. User-Room: 300ms → 12ms
 CREATE INDEX idx_messages_user_room ON messages(user_id, room_id, timestamp DESC);
 ```
 
-### 3.2 Performance Impact
-
-| Index | Purpose | Query Speedup | Storage Cost |
-|-------|---------|---------------|--------------|
-| Room Timeline | Room messages | 150ms → 8ms (95%) | 600 MB (covering) |
-| User History | User messages | 200ms → 10ms (95%) | 600 MB (covering) |
-| BRIN Timestamp | Time-range queries | 500ms → 25ms (95%) | 20 MB (1% of table) |
-| User-Room | Participation queries | 300ms → 12ms (96%) | 300 MB |
-
-**Trade-off**: 62% index overhead justified by 95% query speedup. Read-heavy workload (90% reads).
-
-### 3.3 Query Performance Validation
-
-| Query Type | Target | Actual | Status |
-|------------|--------|--------|--------|
-| Room messages (1K) | < 100ms | 8ms | Pass |
-| User history | < 200ms | 10ms | Pass |
-| Active users count | < 500ms | 25ms | Pass |
-| User's rooms | < 50ms | 12ms | Pass |
-
----
+**Query Performance**: Room msgs 8ms (<100ms target), User history 10ms (<200ms), Active users 25ms (<500ms), User rooms 12ms (<50ms). All pass. **Trade-off**: 62% index overhead justified by 95% speedup.
 
 ## 4. Scaling Considerations
 
-### 4.1 Current Capacity (db.t3.micro)
+**Current (db.t3.micro)**: CPU 8-10% (10x headroom), IOPS 80-100 (30x headroom). **Capacity**: 10-15M msgs, 12K msg/sec ceiling.
 
-| Resource | Usage | Max | Headroom |
-|----------|-------|-----|----------|
-| CPU | 8-10% | 100% | 10x |
-| Memory | 350 MB | 1 GB | 3x |
-| IOPS | 80-100 | 3,000 | 30x |
-| Connections | 10-11 | 100 | 9x |
+**Vertical**: t3.micro ($15/mo) → t3.small ($30, 15K msg/sec) → m5.large ($150, 50K+ msg/sec).
 
-**Projected Capacity**: 10-15M messages before vertical scaling needed. Throughput ceiling: ~12,000 msg/sec.
+**Horizontal**: Read replicas (70% offload), sharding by `room_id%3` (3x writes, scatter-gather trade-off), monthly partitioning (50-90% speedup, S3 archival).
 
-### 4.2 Vertical Scaling Path
+## 5. Backup and Recovery
 
-| Phase | Instance | Capacity | Throughput | Cost/Mo | Trigger |
-|-------|----------|----------|------------|---------|---------|
-| Current | db.t3.micro | 1-10M | 8K msg/sec | $15 | - |
-| Medium | db.t3.small | 10-50M | 15K msg/sec | $30 | CPU>50% |
-| High | db.m5.large | 50-200M | 50K+ msg/sec | $150 | IOPS saturation |
-
-### 4.3 Horizontal Scaling
-
-**Read Replicas** (for analytics):
-```
-Master (us-west-2a):     All writes, critical reads
-Replica 1 (us-west-2b):  Analytics queries (70% read offload)
-Replica 2 (us-west-2c):  Dashboard queries, backups
-```
-
-**Sharding** (for >100M messages):
-```
-Shard by room_id % 3:
-  Shard 1: Rooms 3,6,9,12,15,18     (33% of traffic)
-  Shard 2: Rooms 1,4,7,10,13,16,19  (33% of traffic)
-  Shard 3: Rooms 2,5,8,11,14,17,20  (33% of traffic)
-```
-**Benefit**: 3x write throughput. **Trade-off**: Cross-shard user queries require scatter-gather.
-
-**Partitioning** (for >10M messages):
-```sql
-CREATE TABLE messages (...) PARTITION BY RANGE (timestamp);
-CREATE TABLE messages_2025_11 PARTITION OF messages 
-FOR VALUES FROM ('2025-11-01') TO ('2025-12-01');
-```
-**Benefit**: 50-90% query speedup (partition pruning), easy archival to S3.
-
----
-
-## 5. Backup and Recovery Approach
-
-### 5.1 Automated Backup
-
-**AWS RDS Strategy**:
-- **Daily Snapshots**: 3:00 AM UTC, 7-day retention, incremental to S3
-- **Point-in-Time Recovery (PITR)**: 5-minute RPO, transaction logs archived every 5 minutes
-- **RTO**: 15-30 minutes (restore from snapshot)
-
-### 5.2 Disaster Recovery
-
-**Cross-Region Replica** (production):
-```
-Primary (us-west-2):  Active writer
-DR Replica (us-east-1): Standby (1-min replication lag)
-```
-**RPO**: 1 minute | **RTO**: 5-10 minutes (promote replica + DNS update)
-
-**Backup Verification**: Monthly restore tests to validate data integrity and recovery time.
+**RDS**: Daily snapshots (7d retention), PITR (5min RPO), 15-30min RTO. **DR**: Cross-region replica (us-east-1, 1min lag, 5-10min failover). Monthly restore tests.
 
 ---
 

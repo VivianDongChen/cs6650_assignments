@@ -1,0 +1,57 @@
+===========================================
+AWS RDS PostgreSQL Connection Information
+===========================================
+
+RDS Instance Details:
+- Instance Identifier: cs6650-chat-db
+- Engine: PostgreSQL 16.6
+- Instance Class: db.t3.micro
+- Status: Available
+- Region: us-west-2 (Oregon)
+- Availability Zone: us-west-2a
+
+Connection Details:
+- Endpoint: cs6650-chat-db.cr6q6mmc0zok.us-west-2.rds.amazonaws.com
+- Port: 5432
+- Database Name: chatdb
+- Master Username: postgres
+- Master Password: MyPassword123
+
+JDBC Connection String:
+jdbc:postgresql://cs6650-chat-db.cr6q6mmc0zok.us-west-2.rds.amazonaws.com:5432/chatdb
+
+Connection URL for Consumer:
+postgresql://postgres:MyPassword123@cs6650-chat-db.cr6q6mmc0zok.us-west-2.rds.amazonaws.com:5432/chatdb
+
+psql Connection Command:
+psql -h cs6650-chat-db.cr6q6mmc0zok.us-west-2.rds.amazonaws.com -U postgres -d chatdb
+
+Security Group:
+- Security Group ID: sg-0de6f6487abbacdd4
+- Security Group Name: cs6650-db-sg
+- Inbound Rule: PostgreSQL (TCP 5432) from 0.0.0.0/0
+
+DB Subnet Group:
+- Name: cs6650-db-subnet-group
+- VPC: vpc-0deea73b1b141ad37
+- Subnets: 3 subnets across us-west-2a, us-west-2b, us-west-2c
+
+Schema Objects Created:
+✓ Table: messages
+✓ Indexes:
+  - messages_pkey (PRIMARY KEY)
+  - idx_messages_room_time (B-tree covering index)
+  - idx_messages_user_time (B-tree covering index)
+  - idx_messages_user_room (B-tree composite index)
+  - idx_messages_timestamp_brin (BRIN index)
+✓ Materialized Views:
+  - user_stats
+  - room_stats
+  - hourly_stats
+✓ Function: refresh_all_stats()
+
+Created: 2025-11-19
+Region: us-east-1
+
+IMPORTANT: Keep this password secure and do not commit to Git!
+===========================================

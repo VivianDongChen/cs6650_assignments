@@ -1,0 +1,30 @@
+================================================================================
+Rate-Controlled Endurance Test - Performance Analysis
+================================================================================
+
+Test Summary:
+------------------------------------------------------------
+  Duration: 15.0 minutes
+  Messages sent: 5,397,372
+  Messages failed: 0
+  Target throughput: 6,276 msg/sec
+  Actual throughput: 5988 msg/sec
+  Achievement: 95.4%
+
+Throughput Stability Analysis:
+------------------------------------------------------------
+   0- 5 min:   6304 msg/sec
+   5-10 min:   5972 msg/sec
+
+Connection Pool Stability:
+------------------------------------------------------------
+
+Conclusions:
+------------------------------------------------------------
+  ✓ Test completed successfully
+  ✓ Achieved 5988 msg/sec sustained throughput
+  ✓ Maintained 95.4% of target rate
+  ✓ No message send failures
+  ✓ System stable for 15.0 minute duration
+
+================================================================================

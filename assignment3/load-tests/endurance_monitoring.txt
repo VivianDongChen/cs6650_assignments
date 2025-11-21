@@ -1,0 +1,27 @@
+================================================================================
+Rate-Controlled Endurance Test - Monitoring Data
+================================================================================
+
+Test Duration: 15.0 minutes
+Target Rate: 6,276 msg/sec
+Actual Rate: 5988 msg/sec
+Achievement: 95.4%
+
+Time: 0 minutes (21:11:05)
+------------------------------------------------------------
+  Messages sent: 62,600
+  Messages failed: 0
+  ⚠ Metrics not available
+
+Time: 5 minutes (21:16:16)
+------------------------------------------------------------
+  Messages sent: 1,953,746
+  Messages failed: 0
+  ⚠ Metrics not available
+
+Time: 10 minutes (21:21:27)
+------------------------------------------------------------
+  Messages sent: 3,745,358
+  Messages failed: 0
+  ⚠ Metrics not available
+

@@ -523,12 +523,36 @@ See [config/database.properties](config/database.properties) for complete config
 - [load-tests/endurance_analysis.txt](load-tests/endurance_analysis.txt) - Analysis
 
 ### AWS CloudWatch Screenshots
-- [load-tests/screenshots/cpu.png](load-tests/screenshots/cpu.png) - CPU utilization
-- [load-tests/screenshots/connection.png](load-tests/screenshots/connection.png) - DB connections
-- [load-tests/screenshots/write_iops.png](load-tests/screenshots/write_iops.png) - Write IOPS
-- [load-tests/screenshots/memory.png](load-tests/screenshots/memory.png) - Memory stability
-- [load-tests/screenshots/Metrics API.png](load-tests/screenshots/Metrics%20API.png) - Metrics API
-- [load-tests/screenshots/part 2.png](load-tests/screenshots/part%202.png) - Part 2 batch testing
+
+#### CPU Utilization
+![CPU Utilization](load-tests/screenshots/cpu.png)
+
+**Analysis**: CPU peaked at 15% during stress test, averaged 8-10% during sustained load. Database remained below 20% CPU utilization throughout all tests, indicating 5x headroom for scaling.
+
+#### Database Connections
+![Database Connections](load-tests/screenshots/connection.png)
+
+**Analysis**: Connection count stable at 10-11 connections during load, far below the max pool size of 50. HikariCP effectively managed connection pooling with zero timeout errors.
+
+#### Write IOPS
+![Write IOPS](load-tests/screenshots/write_iops.png)
+
+**Analysis**: Write IOPS peaked at 150 during stress test, averaged 80-100 during sustained writes. Batch processing (1,000 messages per batch) reduced IOPS by 98% compared to individual inserts (estimated 8,000+ IOPS).
+
+#### Memory Freeable
+![Memory Freeable](load-tests/screenshots/memory.png)
+
+**Analysis**: Freeable memory remained stable at 580-650 MB throughout tests. No memory leaks detected over 15-minute endurance test. Buffer pool effectively cached frequently accessed data (95%+ cache hit ratio).
+
+#### Metrics API Response
+![Metrics API](load-tests/screenshots/Metrics%20API.png)
+
+**Analysis**: Metrics API endpoint returning comprehensive statistics including message counts, throughput rates, and query performance. All core queries meet performance targets (room messages: 8ms, user history: 10ms, active users: 25ms).
+
+#### Batch Processing Performance (Part 2)
+![Batch Testing](load-tests/screenshots/part%202.png)
+
+**Analysis**: Batch size optimization tests showing 1,000-message batches achieving optimal balance between throughput (8,000 msg/sec) and latency (650ms p95). Smaller batches (100) resulted in lower throughput (3,000 msg/sec), while larger batches (5,000) caused unacceptable latency (1,200ms).
 
 ---
 

@@ -23,7 +23,7 @@ public class MessagePublisher {
 
     private static final String EXCHANGE_NAME = "chat.exchange";
     private static final String ROUTING_KEY_PREFIX = "room.";
-    private static final int PARTITIONS_PER_ROOM = 3;
+    private static final int PARTITIONS_PER_ROOM = Integer.parseInt(System.getenv().getOrDefault("PARTITIONS_PER_ROOM", "3"));;
     private static final int CHANNEL_POOL_SIZE = Integer.parseInt(
             System.getenv().getOrDefault("CHANNEL_POOL_SIZE", "20"));
 

@@ -28,7 +28,7 @@ public class MessageConsumer {
     private static final int RABBITMQ_PORT = Integer.parseInt(System.getenv().getOrDefault("RABBITMQ_PORT", "5672"));
     private static final String RABBITMQ_USERNAME = System.getenv().getOrDefault("RABBITMQ_USERNAME", "guest");
     private static final String RABBITMQ_PASSWORD = System.getenv().getOrDefault("RABBITMQ_PASSWORD", "guest");
-    private static final int PARTITIONS_PER_ROOM = 3;
+    private static final int PARTITIONS_PER_ROOM = Integer.parseInt(System.getenv().getOrDefault("PARTITIONS_PER_ROOM", "3"));;
     private static final int CONSUMER_THREADS = Integer.parseInt(System.getenv().getOrDefault("CONSUMER_THREADS", "20"));
     private static final int PREFETCH_COUNT = Integer.parseInt(System.getenv().getOrDefault("PREFETCH_COUNT", "10"));
 

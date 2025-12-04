@@ -3,6 +3,7 @@ package com.cs6650.chat.consumer.broadcast;
 import com.cs6650.chat.consumer.model.QueueMessage;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.stats.CacheStats;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,14 +38,25 @@ public class RoomManager {
     private final AtomicLong broadcastsFailed = new AtomicLong(0);
     private final AtomicLong duplicatesDetected = new AtomicLong(0);
 
+    // Cache statistics counters
+    private final AtomicLong cacheHits = new AtomicLong(0);
+    private final AtomicLong cacheMisses = new AtomicLong(0);
+    private final AtomicLong cacheEvictions = new AtomicLong(0);
+
     public RoomManager() {
         this.roomSessions = new ConcurrentHashMap<>();
         this.sessionToRoom = new ConcurrentHashMap<>();
 
-        // Initialize deduplication cache with 5-minute TTL
+        // Initialize deduplication cache with 5-minute TTL and stats
         this.processedMessages = Caffeine.newBuilder()
                 .expireAfterWrite(5, TimeUnit.MINUTES)
                 .maximumSize(100000)  // Limit to 100k messages
+                .recordStats()
+                .removalListener((key, value, cause) -> {
+                    if (cause != null && cause.wasEvicted()) {
+                        cacheEvictions.incrementAndGet();
+                    }
+                })
                 .build();
 
         // Pre-initialize rooms 1-20
@@ -92,13 +104,16 @@ public class RoomManager {
         // Check for duplicate message
         Long previousTimestamp = processedMessages.getIfPresent(messageId);
         if (previousTimestamp != null) {
+            // Cache hit (duplicate)
+            cacheHits.incrementAndGet();
             duplicatesDetected.incrementAndGet();
             LOGGER.warn("Duplicate message detected: {} in room {} (previously processed at {}). Skipping broadcast.",
-                    messageId, roomId, previousTimestamp);
+                messageId, roomId, previousTimestamp);
             return;
         }
 
-        // Mark message as processed
+        // Cache miss -> mark message as processed
+        cacheMisses.incrementAndGet();
         processedMessages.put(messageId, System.currentTimeMillis());
 
         Set<Session> sessions = roomSessions.get(roomId);
@@ -208,6 +223,34 @@ public class RoomManager {
 
     public long getDuplicatesDetected() {
         return duplicatesDetected.get();
+    }
+
+    /**
+     * Return cache-related statistics.
+     */
+    public java.util.Map<String, Object> getCacheStatistics() {
+        CacheStats stats = processedMessages.stats();
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        long hits = cacheHits.get();
+        long misses = cacheMisses.get();
+        result.put("cacheHits", hits);
+        result.put("cacheMisses", misses);
+        double ratio = (hits + misses) == 0 ? 0.0 : (100.0 * hits / (hits + misses));
+        result.put("hitRatio", String.format("%.2f%%", ratio));
+        result.put("cacheSize", processedMessages.estimatedSize());
+        result.put("evictionCount", stats.evictionCount());
+        result.put("recordedEvictions", cacheEvictions.get());
+        return result;
+    }
+
+    /**
+     * Log cache performance details.
+     */
+    public void logCachePerformance() {
+        java.util.Map<String, Object> stats = getCacheStatistics();
+        LOGGER.info("Cache Stats - Hits: {}, Misses: {}, Ratio: {}, Size: {}, Evictions(recorded/stat): {}({})",
+                stats.get("cacheHits"), stats.get("cacheMisses"), stats.get("hitRatio"),
+                stats.get("cacheSize"), stats.get("recordedEvictions"), stats.get("evictionCount"));
     }
 
     /**

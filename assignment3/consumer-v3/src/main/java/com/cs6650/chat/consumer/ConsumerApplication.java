@@ -45,6 +45,7 @@ public class ConsumerApplication {
         MessageConsumer messageConsumer = null;
         HealthServer healthServer = null;
         ScheduledExecutorService statsScheduler = null;
+        ScheduledExecutorService cacheScheduler = null;
 
         try {
             // Initialize Database Connection Pool
@@ -90,16 +91,26 @@ public class ConsumerApplication {
                     TimeUnit.SECONDS
             );
 
+            // Schedule cache performance logging every 10 seconds
+            cacheScheduler = Executors.newScheduledThreadPool(1);
+            cacheScheduler.scheduleAtFixedRate(() -> finalRoomManager.logCachePerformance(), 0, 10, TimeUnit.SECONDS);
+
             // Add shutdown hook
             MessageConsumer finalMessageConsumer = messageConsumer;
             HealthServer finalHealthServer = healthServer;
             ScheduledExecutorService finalStatsScheduler = statsScheduler;
+            ScheduledExecutorService finalCacheScheduler = cacheScheduler;
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 LOGGER.info("Shutdown signal received");
 
                 // Shutdown stats scheduler
                 if (finalStatsScheduler != null) {
                     finalStatsScheduler.shutdown();
+                }
+
+                // Shutdown cache scheduler
+                if (finalCacheScheduler != null) {
+                    finalCacheScheduler.shutdown();
                 }
 
                 // Stop health server

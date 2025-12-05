@@ -29,8 +29,8 @@ public class MessageConsumer {
     private static final String RABBITMQ_USERNAME = System.getenv().getOrDefault("RABBITMQ_USERNAME", "guest");
     private static final String RABBITMQ_PASSWORD = System.getenv().getOrDefault("RABBITMQ_PASSWORD", "guest");
     private static final int PARTITIONS_PER_ROOM = Integer.parseInt(System.getenv().getOrDefault("PARTITIONS_PER_ROOM", "3"));;
-    private static final int CONSUMER_THREADS = Integer.parseInt(System.getenv().getOrDefault("CONSUMER_THREADS", "20"));
-    private static final int PREFETCH_COUNT = Integer.parseInt(System.getenv().getOrDefault("PREFETCH_COUNT", "10"));
+    private static final int CONSUMER_THREADS = Integer.parseInt(System.getenv().getOrDefault("CONSUMER_THREADS", "60"));
+    private static final int PREFETCH_COUNT = Integer.parseInt(System.getenv().getOrDefault("PREFETCH_COUNT", "50"));
 
     private final Connection connection;
     private final RoomManager roomManager;
@@ -62,7 +62,7 @@ public class MessageConsumer {
         factory.setRequestedHeartbeat(60);
         factory.setConnectionTimeout(30000);
 
-        this.connection = factory.newConnection(executorService);
+        this.connection = factory.newConnection();
         LOGGER.info("Connected to RabbitMQ at {}:{}", RABBITMQ_HOST, RABBITMQ_PORT);
     }
 
@@ -70,29 +70,42 @@ public class MessageConsumer {
      * Start consuming messages from all room queues.
      */
     public void startConsuming() throws IOException {
-      int totalQueues = 20 * PARTITIONS_PER_ROOM;  // 60
+      int totalQueues = 20 * PARTITIONS_PER_ROOM;
       LOGGER.info("Starting {} consumer threads for {} partitioned queues",
-          totalQueues, totalQueues);
+          CONSUMER_THREADS, totalQueues);
 
-      // Create one consumer per partitioned queue
+      // Create independent consumer thread for each partitioned queue
       for (int roomId = 1; roomId <= 20; roomId++) {
         for (int partition = 0; partition < PARTITIONS_PER_ROOM; partition++) {
 
-          Channel channel = connection.createChannel();
-          channel.basicQos(PREFETCH_COUNT);
-          channels.add(channel);
+          final int finalRoomId = roomId;
+          final int finalPartition = partition;
+          final String queueName = String.format("room.%d.partition.%d",
+              finalRoomId, finalPartition);
+          final int threadId = (finalRoomId - 1) * PARTITIONS_PER_ROOM + finalPartition;
 
-          // Partitioned queue name
-          String queueName = String.format("room.%d.partition.%d", roomId, partition);
+          // Submit consumer task to executor service for parallel processing
+          executorService.submit(() -> {
+            try {
+              Channel channel = connection.createChannel();
+              channel.basicQos(PREFETCH_COUNT);
 
-          int threadId = (roomId - 1) * PARTITIONS_PER_ROOM + partition;
+              synchronized (channels) {
+                channels.add(channel);
+              }
 
-          LOGGER.info("Thread {} consuming from {}", threadId, queueName);
-          startConsumerForQueue(channel, queueName, threadId);
+              LOGGER.info("Thread {} starting consumer for {}", threadId, queueName);
+              startConsumerForQueue(channel, queueName, threadId);
+
+            } catch (IOException e) {
+              LOGGER.error("Failed to start consumer thread {} for {}",
+                  threadId, queueName, e);
+            }
+          });
         }
       }
 
-      LOGGER.info("All {} consumer threads started for partitioned queues", totalQueues);
+      LOGGER.info("All {} consumer threads submitted for partitioned queues", totalQueues);
     }
 
     private void startConsumerForQueue(Channel channel, String queueName, int threadId)

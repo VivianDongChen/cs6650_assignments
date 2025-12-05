@@ -122,15 +122,10 @@ public class MessagePublisher {
 
             LOGGER.debug("Published message {} to room {} partition {} (userId: {})",
                 queueMessage.getMessageId(), roomId, partition, userId);
-
-            // Wait for confirmation
-            channel.waitForConfirmsOrDie(5000);
-
-            LOGGER.debug("Published message {} to room {}", queueMessage.getMessageId(), roomId);
         } catch (InterruptedException e) {
             LOGGER.error("Interrupted while borrowing channel", e);
             Thread.currentThread().interrupt();
-        } catch (IOException | TimeoutException e) {
+        } catch (IOException e) {
             LOGGER.error("Failed to publish message to room {}", roomId, e);
             // In production, implement retry logic or dead letter queue
         } finally {

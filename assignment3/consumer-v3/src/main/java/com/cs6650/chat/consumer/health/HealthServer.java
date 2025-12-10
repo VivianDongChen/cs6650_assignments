@@ -2,6 +2,7 @@ package com.cs6650.chat.consumer.health;
 
 import com.cs6650.chat.consumer.broadcast.RoomManager;
 import com.cs6650.chat.consumer.cache.CacheManager;
+import com.cs6650.chat.consumer.cache.HotDataCache;
 import com.cs6650.chat.consumer.cache.MetricsCacheDecorator;
 import com.cs6650.chat.consumer.cache.RedisConnectionPool;
 import com.cs6650.chat.consumer.database.DatabaseConnectionPool;
@@ -61,19 +62,27 @@ public class HealthServer {
                 RedisConnectionPool.getInstance()
             );
 
+            // Initialize Level 1 & 2: HotDataCache (in-memory Caffeine)
+            HotDataCache hotDataCache = new HotDataCache();
+
             // Initialize cache manager for lifecycle management
+            // Integrates all 3 cache layers: L1 (Caffeine), L2 (Redis), L3 (Invalidation)
             this.cacheManager = CacheManager.initialize(
                 RedisConnectionPool.getInstance(),
-                metricsCache
+                metricsCache,
+                hotDataCache
             );
 
-            // Create wrapper servlet that uses cached metrics
+            // Start cache maintenance tasks (includes Level 3 invalidation strategy)
+            this.cacheManager.startMaintenanceTasks();
+
+            // Create wrapper servlet that uses 3-layer cache
             MetricsServlet metricsServlet = new MetricsServlet(metricsService, metricsCache);
             context.addServlet(new ServletHolder(metricsServlet), "/metrics");
 
-            LOGGER.info("Redis caching layer initialized for metrics queries");
+            LOGGER.info("3-layer cache initialized: L1 (Caffeine), L2 (Redis), L3 (Invalidation)");
         } catch (Exception e) {
-            LOGGER.warn("Redis initialization failed, falling back to direct database queries: {}", e.getMessage());
+            LOGGER.warn("Cache initialization failed, falling back to direct database queries: {}", e.getMessage());
             // Fallback to direct database queries without caching
             MetricsService metricsService = new MetricsService(connectionPool);
             MetricsServlet metricsServlet = new MetricsServlet(metricsService);
@@ -114,6 +123,10 @@ public class HealthServer {
      */
     public void stop() throws Exception {
         try {
+            // Gracefully shutdown cache manager (Level 1, 2, 3)
+            if (this.cacheManager != null) {
+                this.cacheManager.shutdown();
+            }
             server.stop();
             LOGGER.info("Health check server stopped");
         } catch (Exception e) {

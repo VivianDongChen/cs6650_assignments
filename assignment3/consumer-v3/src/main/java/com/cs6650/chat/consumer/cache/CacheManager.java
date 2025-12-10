@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Cache manager for coordinating Redis caching layer.
  * Manages initialization, lifecycle, and periodic maintenance tasks.
+ * Integrates Level 1 (Redis), Level 2 (Caffeine), and Level 3 (invalidation strategies).
  */
 public class CacheManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(CacheManager.class);
@@ -17,15 +18,20 @@ public class CacheManager {
     private static CacheManager instance;
     private final RedisConnectionPool redisPool;
     private final MetricsCacheDecorator metricsCache;
+    private final HotDataCache hotDataCache;
+    private CacheInvalidationStrategy invalidationStrategy;
     private ScheduledExecutorService cacheMaintenanceExecutor;
 
     private static final int CACHE_REFRESH_INTERVAL_MINUTES = 5;
     private static final int STATS_LOG_INTERVAL_SECONDS = 30;
 
-    private CacheManager(RedisConnectionPool redisPool, MetricsCacheDecorator metricsCache) {
+    private CacheManager(RedisConnectionPool redisPool, MetricsCacheDecorator metricsCache, 
+                        HotDataCache hotDataCache) {
         this.redisPool = redisPool;
         this.metricsCache = metricsCache;
-        LOGGER.info("CacheManager initialized");
+        this.hotDataCache = hotDataCache;
+        this.invalidationStrategy = new CacheInvalidationStrategy(hotDataCache, metricsCache, redisPool);
+        LOGGER.info("CacheManager initialized with 3-layer cache strategy");
     }
 
     /**
@@ -33,9 +39,10 @@ public class CacheManager {
      */
     public static synchronized CacheManager initialize(
             RedisConnectionPool redisPool,
-            MetricsCacheDecorator metricsCache) {
+            MetricsCacheDecorator metricsCache,
+            HotDataCache hotDataCache) {
         if (instance == null) {
-            instance = new CacheManager(redisPool, metricsCache);
+            instance = new CacheManager(redisPool, metricsCache, hotDataCache);
         }
         return instance;
     }
@@ -51,20 +58,35 @@ public class CacheManager {
     }
 
     /**
-     * Start cache maintenance tasks (periodic refresh and monitoring).
+     * Start cache maintenance tasks (periodic refresh, invalidation, and monitoring).
+     * Integrates all 3 cache layers with their respective maintenance strategies.
      */
     public void startMaintenanceTasks() {
-        cacheMaintenanceExecutor = Executors.newScheduledThreadPool(2, r -> {
+        cacheMaintenanceExecutor = Executors.newScheduledThreadPool(3, r -> {
             Thread t = new Thread(r, "CacheMaintenanceThread");
             t.setDaemon(true);
             return t;
         });
 
-        // Schedule cache statistics logging
+        // Start invalidation strategy (Level 3: smart cache invalidation)
+        if (invalidationStrategy != null) {
+            invalidationStrategy.start();
+        }
+
+        // Schedule cache statistics logging (all layers)
         cacheMaintenanceExecutor.scheduleAtFixedRate(
             () -> {
                 try {
+                    // Log L2 (Redis) statistics
                     metricsCache.logCachePerformance();
+                    // Log L1 (Caffeine) statistics
+                    if (hotDataCache != null) {
+                        hotDataCache.logCachePerformance();
+                    }
+                    // Log L3 (Invalidation) statistics
+                    if (invalidationStrategy != null) {
+                        invalidationStrategy.logInvalidationStatistics();
+                    }
                 } catch (Exception e) {
                     LOGGER.error("Error logging cache performance", e);
                 }
@@ -107,7 +129,7 @@ public class CacheManager {
             TimeUnit.SECONDS
         );
 
-        LOGGER.info("Cache maintenance tasks started");
+        LOGGER.info("Cache maintenance tasks started (all 3 layers)");
     }
 
     /**
@@ -125,11 +147,28 @@ public class CacheManager {
     }
 
     /**
-     * Invalidate all caches.
+     * Get hot data cache (Level 1: Caffeine).
+     */
+    public HotDataCache getHotDataCache() {
+        return hotDataCache;
+    }
+
+    /**
+     * Get invalidation strategy (Level 3: smart invalidation).
+     */
+    public CacheInvalidationStrategy getInvalidationStrategy() {
+        return invalidationStrategy;
+    }
+
+    /**
+     * Invalidate all caches (emergency).
      */
     public void invalidateAll() {
         metricsCache.invalidateAll();
-        LOGGER.info("All caches invalidated");
+        if (hotDataCache != null) {
+            hotDataCache.invalidateAll();
+        }
+        LOGGER.info("All caches invalidated (emergency operation)");
     }
 
     /**
@@ -140,10 +179,25 @@ public class CacheManager {
     }
 
     /**
+     * Event-driven cache invalidation (called when message arrives).
+     */
+    public void onMessageArrival(String userId, String roomId, long timestamp) {
+        if (invalidationStrategy != null) {
+            invalidationStrategy.onMessageArrival(userId, roomId, timestamp);
+        }
+    }
+
+    /**
      * Gracefully shutdown cache manager.
      */
     public void shutdown() {
         try {
+            // Shutdown invalidation strategy
+            if (invalidationStrategy != null) {
+                invalidationStrategy.shutdown();
+            }
+
+            // Shutdown maintenance executor
             if (cacheMaintenanceExecutor != null && !cacheMaintenanceExecutor.isShutdown()) {
                 cacheMaintenanceExecutor.shutdownNow();
                 if (!cacheMaintenanceExecutor.awaitTermination(10, TimeUnit.SECONDS)) {

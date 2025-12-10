@@ -1,6 +1,9 @@
 package com.cs6650.chat.consumer.health;
 
 import com.cs6650.chat.consumer.broadcast.RoomManager;
+import com.cs6650.chat.consumer.cache.CacheManager;
+import com.cs6650.chat.consumer.cache.MetricsCacheDecorator;
+import com.cs6650.chat.consumer.cache.RedisConnectionPool;
 import com.cs6650.chat.consumer.database.DatabaseConnectionPool;
 import com.cs6650.chat.consumer.metrics.MetricsService;
 import com.cs6650.chat.consumer.metrics.MetricsServlet;
@@ -17,6 +20,7 @@ import java.time.Duration;
 
 /**
  * Embedded Jetty server for health check endpoints, metrics API, and WebSocket broadcast endpoint.
+ * Integrates Redis caching layer for metrics queries via MetricsCacheDecorator.
  */
 public class HealthServer {
     private static final Logger LOGGER = LoggerFactory.getLogger(HealthServer.class);
@@ -26,6 +30,7 @@ public class HealthServer {
     private final MessageConsumer messageConsumer;
     private final RoomManager roomManager;
     private final DatabaseConnectionPool connectionPool;
+    private CacheManager cacheManager;
 
     public HealthServer(MessageConsumer messageConsumer, RoomManager roomManager, DatabaseConnectionPool connectionPool) {
         this.messageConsumer = messageConsumer;
@@ -47,10 +52,33 @@ public class HealthServer {
         // Add simple status endpoint
         context.addServlet(new ServletHolder(new StatusServlet()), "/status");
 
-        // Add metrics API endpoint
-        MetricsService metricsService = new MetricsService(connectionPool);
-        MetricsServlet metricsServlet = new MetricsServlet(metricsService);
-        context.addServlet(new ServletHolder(metricsServlet), "/metrics");
+        // Initialize Redis connection pool and metrics caching
+        try {
+            RedisConnectionPool.initialize();  // Uses environment variables or defaults
+            MetricsService metricsService = new MetricsService(connectionPool);
+            MetricsCacheDecorator metricsCache = new MetricsCacheDecorator(
+                metricsService,
+                RedisConnectionPool.getInstance()
+            );
+
+            // Initialize cache manager for lifecycle management
+            this.cacheManager = CacheManager.initialize(
+                RedisConnectionPool.getInstance(),
+                metricsCache
+            );
+
+            // Create wrapper servlet that uses cached metrics
+            MetricsServlet metricsServlet = new MetricsServlet(metricsService, metricsCache);
+            context.addServlet(new ServletHolder(metricsServlet), "/metrics");
+
+            LOGGER.info("Redis caching layer initialized for metrics queries");
+        } catch (Exception e) {
+            LOGGER.warn("Redis initialization failed, falling back to direct database queries: {}", e.getMessage());
+            // Fallback to direct database queries without caching
+            MetricsService metricsService = new MetricsService(connectionPool);
+            MetricsServlet metricsServlet = new MetricsServlet(metricsService);
+            context.addServlet(new ServletHolder(metricsServlet), "/metrics");
+        }
 
         // Configure WebSocket endpoint for client broadcast connections
         JettyWebSocketServletContainerInitializer.configure(context, (servletContext, wsContainer) -> {

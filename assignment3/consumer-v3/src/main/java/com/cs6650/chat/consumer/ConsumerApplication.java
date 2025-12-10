@@ -1,6 +1,7 @@
 package com.cs6650.chat.consumer;
 
 import com.cs6650.chat.consumer.broadcast.RoomManager;
+import com.cs6650.chat.consumer.cache.CacheManager;
 import com.cs6650.chat.consumer.database.BatchMessageWriter;
 import com.cs6650.chat.consumer.database.DatabaseConnectionPool;
 import com.cs6650.chat.consumer.health.HealthServer;
@@ -13,8 +14,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Main application for the chat message consumer - Version 3 with PostgreSQL persistence.
- * Consumes messages from RabbitMQ, writes to database, and broadcasts to WebSocket clients.
+ * Main application for the chat message consumer - Version 3 with PostgreSQL persistence and Redis caching.
+ * Consumes messages from RabbitMQ, writes to database, broadcasts to WebSocket clients,
+ * and caches metrics queries via Redis for improved performance.
  */
 public class ConsumerApplication {
     private static final Logger LOGGER = LoggerFactory.getLogger(ConsumerApplication.class);
@@ -113,13 +115,24 @@ public class ConsumerApplication {
                     finalCacheScheduler.shutdown();
                 }
 
-                // Stop health server
+                // Stop health server (which also stops cache manager)
                 if (finalHealthServer != null) {
                     try {
                         finalHealthServer.stop();
                     } catch (Exception e) {
                         LOGGER.error("Error stopping health server", e);
                     }
+                }
+
+                // Shutdown cache manager
+                try {
+                    CacheManager cacheManager = CacheManager.getInstance();
+                    if (cacheManager != null) {
+                        cacheManager.shutdown();
+                    }
+                } catch (IllegalStateException e) {
+                    // Cache manager not initialized
+                    LOGGER.debug("Cache manager not initialized, skipping shutdown");
                 }
 
                 // Shutdown message consumer

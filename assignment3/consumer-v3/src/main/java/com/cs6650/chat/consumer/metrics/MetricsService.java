@@ -12,6 +12,9 @@ import java.util.*;
 /**
  * Service for querying and returning metrics from the PostgreSQL database.
  * Implements core queries and analytics queries as specified in Assignment 3.
+ * 
+ * Thread-safe service that executes database queries. Can be wrapped by MetricsCacheDecorator
+ * for distributed Redis caching layer (cache-aside pattern).
  */
 public class MetricsService {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetricsService.class);

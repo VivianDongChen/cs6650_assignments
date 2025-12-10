@@ -92,6 +92,13 @@
       <version>${caffeine.version}</version>
     </dependency>
 
+    <!-- Redis Client (Jedis) -->
+    <dependency>
+      <groupId>redis.clients</groupId>
+      <artifactId>jedis</artifactId>
+      <version>4.4.3</version>
+    </dependency>
+
     <!-- Jetty for health check endpoint and WebSocket server -->
     <dependency>
       <groupId>org.eclipse.jetty</groupId>

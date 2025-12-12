@@ -28,14 +28,16 @@ public class RedisConnectionPool {
         this.db = db;
 
         JedisPoolConfig poolConfig = new JedisPoolConfig();
-        poolConfig.setMaxTotal(20);           // Max connections
-        poolConfig.setMaxIdle(10);            // Max idle connections
-        poolConfig.setMinIdle(5);             // Min idle connections
+        poolConfig.setMaxTotal(50);           // Max connections (increased from 20 for high load)
+        poolConfig.setMaxIdle(30);            // Max idle connections (increased from 10)
+        poolConfig.setMinIdle(10);            // Min idle connections (increased from 5)
         poolConfig.setTestOnBorrow(true);     // Test connections before borrowing
         poolConfig.setTestOnReturn(false);
         poolConfig.setTestWhileIdle(true);
-        poolConfig.setMinEvictableIdleTimeMillis(30000);  // 30 seconds
-        poolConfig.setTimeBetweenEvictionRunsMillis(10000); // 10 seconds
+        poolConfig.setBlockWhenExhausted(true);           // Block when pool exhausted
+        poolConfig.setMaxWait(java.time.Duration.ofMillis(5000));  // Wait up to 5 seconds for connection
+        poolConfig.setMinEvictableIdleTimeMillis(60000);  // 60 seconds (increased from 30)
+        poolConfig.setTimeBetweenEvictionRunsMillis(15000); // 15 seconds (increased from 10)
 
         try {
             if (password != null && !password.isEmpty()) {
